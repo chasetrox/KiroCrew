@@ -1236,6 +1236,80 @@ def _heredoc_marker(raw: str) -> "str | None":
     return raw[3:] if raw.startswith("<<-") else raw[2:]
 
 
+def _xargs_here_string_rebuild(
+    verb: str, tokens: "list[str]", xargs_index: int, verb_index: int
+) -> "str | None":
+    """The command an xargs-launched verb runs when a here-string feeds it.
+
+    ``xargs ssh <<< localhost`` reaches ``ssh localhost``: bash removes the
+    ``<<< word`` pair from the command's argv and delivers the word on stdin,
+    and xargs turns stdin into ARGUMENTS for the program it launches --
+    appended after the verb's own args, or substituted for every ``-I``/``-i``
+    replacement token (round-35).  Every piece is in the source text, so the
+    caller can judge the rebuilt command exactly like a directly-typed one.
+    Returns ``None`` when no here-string feeds this simple command.  Tokens
+    are kept verbatim (quotes and mask sentinels intact) so the rebuilt text
+    walks the caller's own tokenizer unchanged.
+    """
+    payload: "str | None" = None
+    consumed: "set[int]" = set()
+    # A redirection can sit anywhere in the simple command, including BEFORE
+    # the utility word (``<<< localhost xargs ssh``), so the scan covers the
+    # whole simple command: back to the token after the previous separator,
+    # forward to the next one.
+    start = xargs_index
+    while start > 0 and not _ends_argv(tokens[start - 1]):
+        start -= 1
+    for j in range(start, len(tokens)):
+        tok = tokens[j]
+        if _ends_argv(tok):
+            break
+        hs = _here_string_payload(tok)
+        if hs is None:
+            continue
+        if hs:
+            payload = hs
+            consumed = {j}
+        elif j + 1 < len(tokens) and not _ends_argv(tokens[j + 1]):
+            payload = tokens[j + 1]
+            consumed = {j, j + 1}
+        break
+    if payload is None:
+        return None
+    # xargs's own options decide HOW stdin becomes argv: an ``-I``/``-i``
+    # replacement token is swapped in wherever it appears among the verb's
+    # args; with none, the stdin words are APPENDED after them.
+    replstr: "str | None" = None
+    for k in range(xargs_index + 1, verb_index):
+        opt = tokens[k].strip("\"'")
+        if opt == "-I" and k + 1 < verb_index:
+            replstr = tokens[k + 1].strip("\"'")
+        elif opt.startswith("-I") and len(opt) > 2:
+            replstr = opt[2:]
+        elif opt in ("-i", "--replace"):
+            replstr = "{}"
+        elif opt.startswith("--replace="):
+            replstr = opt.split("=", 1)[1] or "{}"
+        elif opt.startswith("-i") and not opt.startswith("--") and len(opt) > 2:
+            replstr = opt[2:]
+    args: "list[str]" = []
+    for j in range(verb_index + 1, len(tokens)):
+        if j in consumed:
+            continue
+        tok = tokens[j]
+        if _ends_argv(tok):
+            break
+        args.append(tok)
+    if replstr is not None:
+        # xargs substitutes the replacement token ANYWHERE inside an argument
+        # (``ssh user@{}`` becomes ``ssh user@localhost``), so the rebuild
+        # replaces substrings, not only whole tokens.
+        args = [tok.replace(replstr, payload) if replstr in tok else tok for tok in args]
+    else:
+        args.append(payload)
+    return " ".join([verb, *args]).strip()
+
+
 def _operand_span_end(run: list[str], idx: int, text: str) -> int:
     """Index just past a redirect OPERAND that continues into later tokens.
 
