@@ -1914,6 +1914,151 @@ def _voice_runtime_ancestor_guards() -> tuple[str, ...]:
     return _voice_runtime_paths_cache[4]
 
 
+def _path_identity(path: str) -> tuple[int, int] | None:
+    """``(st_dev, st_ino)`` for *path*, or ``None`` when it cannot be stat'd.
+
+    THE seam every identity comparison below goes through, so a path that
+    cannot be inspected (not created yet, an ancestor this process may not
+    traverse, a race that unlinks mid-walk) degrades to the spelling answer
+    instead of raising into the caller's spawn path.
+
+    ``os.lstat``, never ``stat``: these paths arrive from CONFIG TEXT, and the
+    final component is where a planted symlink could point at a remote or
+    stalling target -- following it would turn a local containment question into
+    off-host I/O. Nothing is lost by refusing to follow,
+    because symlink resolution already happened upstream: the caller compares
+    the ``realpath`` spelling as well, and a link INTO the sealed parent is
+    caught there with every component resolved.
+    """
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return None
+    return (info.st_dev, info.st_ino)
+
+
+def _identity_within_sealed_parent(path: str, parent: str) -> bool:
+    """Whether *path* is *parent* or lies inside it BY FILESYSTEM IDENTITY.
+
+    Spelling alone misses an alias the filesystem itself treats as the same
+    directory. On case-insensitive APFS ``<data home>/RUN`` and
+    ``<data home>/run`` are ONE directory, and ``realpath`` does not fold the
+    difference (it walks with ``lstat``/``readlink``, neither of which
+    canonicalizes case) -- so a differently-cased declaration walks straight
+    past the lexical predicate, which would let the probe honor it and hand the
+    child a TMPDIR the seal has already made read-only. Identity is the
+    filesystem's own answer, which covers firmlink and normalization aliases for
+    free.
+
+    A declared temp usually does NOT exist yet, so the walk simply climbs until
+    a component stats: the deepest EXISTING ancestor is what carries identity,
+    and if that ancestor is the sealed parent or lives under it then so does
+    every not-yet-created component below it -- *path* arrives resolved and
+    normalized, so no remainder can climb back out. Only the sealed parent's
+    identity is compared, never a case-folded spelling, so a case-SENSITIVE
+    filesystem keeps answering exactly as it did: there ``<data home>/RUN`` is a
+    different directory, it does not exist, and nothing seals it.
+
+    An unstat-able parent yields ``False`` rather than a folded-spelling guess.
+    :func:`_voice_runtime_parent_paths` primes and CREATES the sealed parent, so
+    that needs an out-of-band deletion race to reach -- and in that state
+    case-folding would mis-refuse a genuinely distinct ``RUN`` directory on a
+    case-sensitive filesystem, which is the worse answer: the OS seal is the
+    actual boundary, and this predicate only turns its EROFS into a clean
+    refusal.
+    """
+    parent_identity = _path_identity(parent)
+    if parent_identity is None:
+        return False
+    current = path
+    while True:
+        if _path_identity(current) == parent_identity:
+            return True
+        next_up = os.path.dirname(current)
+        if next_up == current:
+            return False
+        current = next_up
+
+
+#: Why a spec-declared temp path is refused. ``sealed`` is a path inside
+#: ``<data home>/run``; ``unclassifiable`` is a path whose canonical form cannot
+#: be established (a symlink cycle, a component that cannot be traversed), so
+#: containment cannot be verified.
+DeclaredTempRefusal = Literal["sealed", "unclassifiable"]
+
+
+def classify_declared_temp_path(path: str) -> "DeclaredTempRefusal | None":
+    """Why a spec-declared temp *path* is refused, or ``None`` when it may be honored.
+
+    The cause matters to the caller because only ``"sealed"`` describes a
+    path inside ``<data home>/run``: an ``"unclassifiable"`` refusal is about a
+    path whose canonical form could not be established, and a diagnostic that
+    called it sealed would send an operator looking in the wrong place. Every
+    cause gets the same response -- stop honoring the path.
+
+    The question a caller must ask BEFORE it hands a sandboxed child a directory
+    that came from config text. ``<data home>/run`` is sealed read-only
+    on both backends, so a spec-declared ``TMPDIR`` under it silently gives the
+    child a temp dir it cannot write -- and the write carve-out is not the answer:
+    ``extra_writable_dirs`` is validated for SELF-DERIVED scratch paths only, so
+    pointing it at spec text would hand untrusted config a write window under
+    ``run``. A caller that gets a refusal cause must therefore stop honoring the
+    path, not try to open it.
+
+    Windows: nothing to refuse, so ``None`` for every path. Kiro Crew has no
+    native Windows sandbox backend (see the delegation note in
+    :func:`wrap_argv`): a probe child there is either not spawned at all or runs
+    unsandboxed with a writable ``run``, so a declared temp under it is
+    writable and is honored exactly as it was before this check existed. Gating
+    here rather than resolving is also what keeps the check local -- on Windows
+    ``realpath`` and ``stat`` OPEN the path, so classifying untrusted config
+    text there would mean opening whatever it names.
+
+    Both spellings are tested because the data home may be a supported symlink
+    and path-based rules see each spelling independently. Spelling is only the
+    fast answer: :func:`_identity_within_sealed_parent` then asks the filesystem
+    itself, so a case, firmlink, or normalization alias of the seal cannot walk
+    past this predicate.
+
+    Blocking (``realpath``, the identity walk, plus the one-time priming of the
+    runtime directories), so an async caller must reach it off the event loop.
+    """
+    if not path:
+        return None
+    if sys.platform == "win32":
+        return None
+    # realpath resolves the ORIGINAL spelling, BEFORE any lexical pass. Order is
+    # load-bearing: normalizing first collapses ``..`` lexically and so deletes
+    # the very symlink that ``..`` was climbing out of, which would make a
+    # ``<symlink-into-run>/../tmp`` declaration read as outside the seal while
+    # the child's libc resolves symlink-first and lands back inside it. Both
+    # spellings are still checked, since path-based sandbox rules
+    # see the lexical one independently.
+    #
+    # Strict first, so the kernel's own loop detection answers for a symlink
+    # cycle: the lenient form returns a cycle's link with the remainder appended
+    # and never raises, and comparing that half-resolved spelling would honor a
+    # declaration whose real location is unknown. A declared temp usually does
+    # not exist yet, so a missing component is the ordinary case and falls back
+    # to resolving as far as the path goes; every other failure (ELOOP, ENOTDIR,
+    # EACCES) leaves the canonical form unestablished, which is refused like any
+    # other unverifiable declaration.
+    try:
+        canonical = os.path.realpath(path, strict=True)
+    except FileNotFoundError:
+        canonical = os.path.realpath(path)
+    except OSError:
+        return "unclassifiable"
+    lexical = os.path.normpath(os.path.abspath(path))
+    spellings = tuple(dict.fromkeys((lexical, canonical)))
+    parents = _voice_runtime_parent_paths()
+    for spelling in spellings:
+        for parent in parents:
+            if _path_within(spelling, parent) or _identity_within_sealed_parent(spelling, parent):
+                return "sealed"
+    return None
+
+
 _VOICE_GUARD_REMEDY = "Pick a project subdirectory that does not contain the Kiro Crew data home."
 
 _VoiceGuardRelationship = Literal["contains", "inside", "alias", "cannot-verify"]
