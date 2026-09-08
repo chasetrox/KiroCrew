@@ -13,7 +13,7 @@
     "python3 scripts/check_subprocess_encoding.py --test",
     "python3 scripts/check_subprocess_encoding.py",
     "python3 scripts/check_comment_history.py --test",
-    "python3 scripts/check_comment_history.py",
+    "BASE=\"$(git merge-base HEAD origin/main)\" && COMMENT_HISTORY_BASE_REF=\"$BASE\" python3 scripts/check_comment_history.py",
     "python3 scripts/check_agent_sdk_boundary.py --test",
     "python3 scripts/check_agent_sdk_boundary.py",
     "python3 scripts/check_sync_io_in_async.py --test",

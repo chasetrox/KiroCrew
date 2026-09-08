@@ -1,14 +1,17 @@
 """The shared work record between a conductor session and the workers it dispatched.
 
-Three ledgers now carry that name, and they are not interchangeable.
+Three ledgers carry that name, and they are not interchangeable.
 :mod:`kiro_crew.session_ledger` is ONE session's own durable state. Issue Radar's
 ``crew_store`` is a per-repository work ledger keyed by a forge issue number. This
 module is the third: a record two parties write and neither owns, so that a
 conductor learns what a worker did as DATA instead of reading its transcript.
 
-Phase 1 of the conductor-work-ledger RFC (pull request #8842) — storage only.
-No MCP tool, no HTTP route, no UI, and deliberately no importer anywhere else in the
-tree, so the phase reverts by deleting this file and its test.
+This module is the STORAGE layer only. Its one importer is
+``dashboard/handlers/work_ledger.py``, which serves the ``/api/work-ledger``
+routes; the MCP tools in :mod:`kiro_crew.mcp_work` (``work_brief``,
+``work_report``, ``work_ledger_read``, ``work_ledger_record``) reach it only
+through those routes. Every write therefore passes the two entry points below,
+so the writer-ownership rule is enforced in one place.
 
 WRITER OWNERSHIP is the whole design, and it is expressed as two entry points rather
 than one update function with a field allowlist:

@@ -370,6 +370,7 @@ class TestGateParityWithCi:
     _PR_ONLY_BY_CONSTRUCTION: frozenset[str] = frozenset(
         {
             "check_brand_name.py",
+            "check_comment_history.py",
             "check_focus_cue.py",
             "check_harness_parity.py",
             "check_changelog_history.py",

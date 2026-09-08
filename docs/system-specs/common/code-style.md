@@ -86,21 +86,27 @@ using one of these phrases is fine. Present-tense purpose is not narration:
 "regression test pins this shape" passes, "regression for the truncated parse"
 does not.
 
-The ~7,600 markers the tree already carries are recorded per file in
-`comment-history-baseline.json`. A file not listed there must be clean, a listed
-file may not grow its count, and a count that drops must be lowered in the same
-PR — run `python3 scripts/check_comment_history.py --write-baseline`, which only
-ever lowers and prunes. It refuses when the baseline is absent, so deleting the
-file cannot amnesty the tree; restore it from git instead.
+The gate is diff-scoped, like the brand-name gate: it judges only the lines a
+change ADDS, measured against `COMMENT_HISTORY_BASE_REF` (the PR's base in CI).
+Added lines are complete for regression — a line only reaches `main` through a
+diff that added it — and they are the only lines a contributor can act on. There
+is no baseline file: a shared per-file count would make one JSON the merge-conflict
+hotspot of every cleanup PR. The legacy markers the tree still carries are not
+tracked; a marker can re-enter only on an added line, which is what the gate
+judges. Without the env the script prints whole-tree counts and does not enforce.
+
+```bash
+COMMENT_HISTORY_BASE_REF=origin/main python3 scripts/check_comment_history.py
+```
 
 ## The lint pitfalls
 
-The blocking gates are black (baselined), the subprocess-encoding gate (baselined), the comment-history gate (baselined), isort, flake8 and mypy. Run them before
+The blocking gates are black (baselined), the subprocess-encoding gate (baselined), the comment-history gate (diff-scoped), isort, flake8 and mypy. Run them before
 committing:
 
 ```bash
 python3 scripts/check_black_formatting.py && python3 scripts/check_subprocess_encoding.py
-python3 scripts/check_comment_history.py && isort src/kiro_crew test
+COMMENT_HISTORY_BASE_REF=origin/main python3 scripts/check_comment_history.py && isort src/kiro_crew test
 flake8 src/kiro_crew test && mypy src/kiro_crew
 python -m pytest
 ```
