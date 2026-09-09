@@ -933,15 +933,16 @@ export default function WebPreviewPanel({ sessionKey, active = true }: { session
             aria-hidden
           />
         )}
-        {/* This chat's session, by the name the framed dashboard lists it under
-            — the sidebar shows every browser on the host, and the name is what
-            tells this one apart. The label is visible text, not a tooltip, and
-            says "browser session": "session" alone is also what the app calls
-            its chats and what the frame's own list is headed. Rendered only
-            once a launch has named it. The group is the row's only flexible
-            item: at narrow widths (320px) it gives way first — label, then name,
-            each truncating — so the controls to its right, including the only
-            way back to the preview bar, always fit. */}
+        {/* This chat's browser, by the session name the framed dashboard lists it
+            under — the sidebar lists the gateway's own browser sessions, and the
+            name is what tells this one apart. The label is visible text, not a
+            tooltip, and deliberately does not say "session": that word is already
+            what the app calls its chats and what the frame's own list is headed,
+            so the name chip carries the identity. Rendered only once a launch has
+            named it. The group is the row's only flexible item: at narrow widths
+            (320px) it gives way first — label, then name, each truncating — so
+            the controls to its right, including the only way back to the preview
+            bar, always fit. */}
         {launchedSession && (
           <span className="flex min-w-0 flex-1 items-center gap-1 text-[11px] text-muted overflow-hidden" data-testid="web-preview-session-label">
             <span className="min-w-0 truncate">{i18nT('components.webPreviewPanel.this_chat_s_browser_session')}</span>

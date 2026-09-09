@@ -219,6 +219,12 @@ lists as up and this life has not recorded (`reclaim_stranded`, a background
 task so a CLI spawn never gates the port bind) — the previous life that died
 without reaching its shutdown hook. A panel session therefore never outlives the
 gateway that owns it; an unclean death only defers the close to the next start.
+**Accepted cost:** there is no idle timeout, cap or LRU on `panel-` sessions —
+one Chromium daemon per chat slot whose address bar was used, alive for the
+gateway's life. The bound is a dashboard's handful of slots, a human's open
+browser is exactly what must not be closed under them (their logins live in it),
+and the human closes one themselves from the framed grid when they are done;
+a close policy is a follow-up if that bound is ever exceeded in practice.
 What startup reclamation reads is the registry, same-user-writable filesystem
 state the sweep above refuses to act on — acceptable here because the only
 action it can be tricked into is a `close` of a session under our own prefix, a
@@ -428,7 +434,9 @@ bare `open` on a live session tears that browser down and starts another,
 losing its tabs, so neither an unreadable list nor a failed `goto` may escalate
 to one. The `--json` flag is part of the CLI's command surface; an error
 sentence is not, which is why the decision reads the former. The answer is
-`{ok, session, error, view}` (the URL is the caller's own input and is not echoed); `error` is the CLI's
+`{ok, session, error, attached, view}` (the URL is the caller's own input and is not echoed); `attached`
+says whether the reveal below took, so the panel names the session to pick only
+when it did not; `error` is the CLI's
 own text — ANSI stripped, the update banner, the 2 KB Chromium argv dump and
 Node's stack preamble removed, credentials redacted, capped — so the panel
 shows `No usable sandbox!` or `Chromium distribution 'chrome' is not found …`
@@ -506,6 +514,23 @@ socket is stale it becomes the winner and launches a Chromium app window on the
 gateway host. Connecting ourselves fails closed — no listener, no reveal, nothing
 else — and Windows (a named pipe) skips it.
 
+*Probe note.* The reveal rests on two byte-level needles in the serving
+`playwright-core` package's core bundle (the `coreBundle` file under its `lib`
+directory, beside the package's `browsers.json`), measured by
+`install.cli_dashboard_socket_supported` before every reveal attempt:
+`makeSocketPath("dashboard", "app")` (the dashboard's singleton socket) and
+`process.env.PWTEST_SOCKETS_DIR ||` (the socket-root hook the launcher and the
+`show` child share). The answer is cached by the bundle's path, mtime and size,
+so an upstream `@playwright/cli` bump re-runs the measurement on its own; a
+bundle missing either needle skips the reveal and logs the once-per-process
+WARNING above. Both needles are present in `@playwright/cli@0.1.18` and in
+`playwright-core@1.63.0-alpha-2026-08-31` (the dependency of `@playwright/cli@0.1.19`).
+When an upgrade turns the WARNING on, re-measure the needles against the new
+bundle and either update them or cut the reveal unit (`_reveal`,
+`_dashboard_socket_path`, `install.cli_dashboard_socket_supported`, their tests
+and this paragraph) — the page still opens and frames without it; only the
+auto-attach is lost.
+
 **Panel behaviour.** `normalizeUrl` upgrades a bare public host to `https://`
 (`google.com`) and keeps `http://` for the dev-server shapes — a loopback host,
 an IP literal, or any explicit port; this default is shared by both transports,
@@ -514,9 +539,25 @@ host the preview iframe path is unchanged; on the native transport an external
 host still goes to the native view. While the gateway is launching, the panel
 shows an opening state; on success the CLI view takes the panel, and the framed
 dashboard's own URL bar, tab bar and remote input carry navigation from there —
-the panel adds no second address bar beside a surface that already has one; on
+the panel adds no second address bar beside a surface that already has one. The
+view header names this chat's browser by its `panel-…` session; one sentence
+under it says how the next site is opened (the padlock above the page unlocks
+the frame's own address bar; the monitor button brings the preview bar back)
+and is dismissed once per browser; and when the answer says the reveal did not
+attach (`attached: false`), one line names the session to pick in the frame's
+sidebar — said only in that case. On
 failure the panel hands back to the preview body and renders the gateway's text
-through `ErrorNotice` (dismiss on the notice, one retry action). The view URL is
+through `ErrorNotice` (dismiss on the notice, one retry action). A URL with a
+`?` query or `#` fragment never makes the round trip: the panel refuses the same
+shape the gateway refuses (`hasQueryOrFragment`) and shows a plain hint — not an
+error, nothing failed — saying where such a link goes: open the site's plain
+address, then type the full link into the frame's own address bar behind its
+padlock; no retry. The gateway's own `invalid_url` answer, from a caller that
+skipped that check, is a rejected request and renders the same sentence through
+`ErrorNotice`. Only the newest
+launch on a slot may paint: every launch takes a sequence number, a slot change
+bumps it, and a late answer from an older launch (a mistyped address that fails
+after the corrected one succeeded, or a slot the user left) paints nothing. The view URL is
 loopback on the GATEWAY host, so from a browser on another machine it is dead
 unless `dashboard.browser_view_port` is pinned and forwarded: the panel probes it
 with the same no-cors liveness check it uses for a dev server and, on two
@@ -529,7 +570,7 @@ rather than showing the browser's own connection-refused page.
 |---------|----------------|
 | Capability availability | Presence of `playwright-cli` on PATH; see [Capability model](#capability-model) for why this is not approval |
 | Dashboard exposure | `show` is bound to `127.0.0.1`; `0.0.0.0` is never passed, because the served view carries remote input |
-| Address bar launcher (`POST /api/browser/open`) | Owner-only (cookie/token), on no internal-path list, and the handler refuses an internal-secret caller outright, so an agent cannot use it to skip the shell approval ladder. The URL is re-validated (`http`/`https`, host, and no secret-bearing userinfo, query, or fragment — argv is world-readable) before it is the one free argv element; the session name is derived hex; no sandbox flag is ever added and no config written — the operator's `PLAYWRIGHT_MCP_CONFIG` is inherited as-is. Only sessions this gateway opened are closed at shutdown, never `close-all`/`kill-all` |
+| Address bar launcher (`POST /api/browser/open`) | Owner-only (cookie/token), on no internal-path list, and the handler refuses an internal-secret caller outright, so an agent cannot use it to skip the shell approval ladder. The URL is re-validated (`http`/`https`, host, and no secret-bearing userinfo, query, or fragment — argv is world-readable) before it is the one free argv element; the session name is derived hex; no sandbox flag is ever added and no config written — the operator's `PLAYWRIGHT_MCP_CONFIG` is inherited as-is. Only sessions this gateway opened are closed at shutdown, never `close-all`/`kill-all`. **Accepted residual:** a token carried in the URL *path* still reaches argv for the life of the CLI process; paths stay allowed because refusing them refuses most ordinary pages. The residual closes when the CLI takes the URL outside argv — #9854 tracks that switch and its version floor |
 | Agent reach into a `panel-` session | **Accepted residual.** A `panel-` browser can hold logins the human typed into it, and an agent drives the same CLI through its shell. What separates the populations is structural but not an enforcement boundary: an agent process runs under its own generated `PWTEST_DAEMON_SESSION_DIR`/`PWTEST_SOCKETS_DIR` namespace (see [Generated session reachability](#generated-session-reachability)), so a bare `playwright-cli -s=panel-… goto` from an agent shell resolves no session and its `list` does not show one; reaching the human's browser takes a command that also names the CLI's default registry and the gateway's socket root, both readable by a same-user process. The control on that command is the ordinary shell approval ladder, exactly as for every other `playwright-cli` invocation; the reserved prefix and the `web-browse` skill's rule are the conventions on top. An enforced isolation would be a per-population credential on the daemon socket, which the CLI does not offer |
 | Reveal | One JSON line to the `show` dashboard's own singleton socket under the gateway-owned socket root both children run with, only when the installed bundle carries that layout, after a successful launch; fails closed when there is no listener. `show -s=<name>` (no port) is never run, since with a stale socket it launches a Chromium app window on the host |
 | Saved state files | Owner-only permissions; they hold live session credentials |
