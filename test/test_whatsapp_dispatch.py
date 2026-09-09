@@ -12,6 +12,8 @@ import asyncio
 from types import SimpleNamespace
 from typing import Any
 
+from _hot_reload_helpers import live_dm_scope as _live_dm_scope
+
 from kiro_crew.acp.types import EVENT_COMPLETE, EVENT_TEXT_CHUNK
 from kiro_crew.messaging.driver import APPROVAL_AUTO
 from kiro_crew.messaging.transport import InboundMessage
@@ -272,6 +274,8 @@ def _make(provider=None, busy=False, transport_fail=False, **session_kwargs):
 
 
 _DM = "447700900000@s.whatsapp.net"
+
+
 _GROUP = "12345-67890@g.us"
 
 
@@ -336,7 +340,7 @@ def test_compact_command_compacts_in_place_without_a_turn():
 
 def test_compact_command_declined_on_auto_managed_backend():
     # A backend that cannot serve /compact gets the informational reply and
-    # compact() is NEVER dispatched (#8156).
+    # compact() is NEVER dispatched.
     provider = FakeProvider()
     provider.manual_compact_unsupported_backend = "kas"
     d, _client, sessions, transport = _make(provider=provider)
@@ -358,7 +362,7 @@ def test_compact_none_capability_preserves_dispatch():
 
 def test_the_hard_threshold_declines_silently_on_auto_managed_backend():
     # No /compact to dispatch and no notice: the backend compacts on its own
-    # as context fills (#8156).
+    # as context fills.
     provider = FakeProvider("answered")
     provider.manual_compact_unsupported_backend = "kas"
     d, _client, _sessions, transport = _make(provider=provider, context_pct=96.0)
@@ -369,7 +373,7 @@ def test_the_hard_threshold_declines_silently_on_auto_managed_backend():
 
 def test_the_soft_nudge_is_suppressed_on_auto_managed_backend():
     # The nudge advises /compact, which this backend refuses — it compacts on
-    # its own, so there is nothing for the user to act on (#8156).
+    # its own, so there is nothing for the user to act on.
     provider = FakeProvider("answered")
     provider.manual_compact_unsupported_backend = "kas"
     d, _client, _sessions, transport = _make(provider=provider, context_pct=85.0)
@@ -795,12 +799,12 @@ def test_a_non_operator_never_shares_the_operators_unified_session():
     admitted peer could ask what was discussed and be told.
     """
     d, _client, _sessions, transport = _make()
-    d.cfg.messaging.dm_scope = "unified"
-    operator_msg = _msg("hi", user="447700900000")
-    peer_msg = _msg("hi", conv="447711111111@s.whatsapp.net", user="447711111111")
+    with _live_dm_scope("unified"):
+        operator_msg = _msg("hi", user="447700900000")
+        peer_msg = _msg("hi", conv="447711111111@s.whatsapp.net", user="447711111111")
 
-    operator_key = d._session_key(operator_msg.conversation_id, is_operator=True)
-    peer_key = d._session_key(peer_msg.conversation_id, is_operator=False)
+        operator_key = d._session_key(operator_msg.conversation_id, is_operator=True)
+        peer_key = d._session_key(peer_msg.conversation_id, is_operator=False)
 
     assert operator_key.startswith("unified:"), "the operator keeps cross-surface continuity"
     assert not peer_key.startswith("unified:"), "a peer must not land in the shared bucket"
@@ -1089,9 +1093,9 @@ def test_the_operators_unified_bucket_is_the_one_seeded():
     ``unified:{agent}``. Seeding from a per-peer bucket would read 0 and put the
     resurrection straight back."""
     d, _client, sessions, _transport = _make()
-    d.cfg.messaging.dm_scope = "unified"
-    sessions.persisted_generations["unified:kirocrew"] = 4
-    assert d._conv.current_gen(_DM) == 4
+    with _live_dm_scope("unified"):
+        sessions.persisted_generations["unified:kirocrew"] = 4
+        assert d._conv.current_gen(_DM) == 4
 
 
 def test_a_fresh_machine_still_starts_at_generation_zero():

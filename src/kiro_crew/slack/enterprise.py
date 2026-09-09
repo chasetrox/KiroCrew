@@ -239,6 +239,53 @@ def _load_allowed_team_ids() -> bool:
     return False
 
 
+def reload_allowed_team_ids() -> bool:
+    """Re-read ``slack.allowed_enterprise_ids`` after a config write.
+
+    The hot-apply entry point for the allowlist: a write from the dashboard, the
+    CLI or ``$EDITOR`` must narrow (or widen) admission without a gateway
+    restart, and ``check_message_origin`` reads the module cache this refills.
+
+    Deliberately re-runs :func:`_load_allowed_team_ids` rather than taking the
+    caller's reloaded config, because that function's validated read is the SOLE
+    source of the allowlist -- a caller's ``KiroCrewConfig.load()`` snapshot
+    normalizes bad input away and would reopen the allowlist it is meant to
+    narrow (the two-reader widening this module documents at length). So a
+    degraded read still fails CLOSED here: the allowlist stays "configured" and
+    admits nothing until the file is readable again.
+
+    Runs blocking file I/O (the config read), so callers on the event loop must
+    dispatch it to a thread. Returns True when the read was DEGRADED.
+    """
+    if not _validated_team_id and not _validated_enterprise_id:
+        # No validated workspace yet, so there is no cache to refresh: the
+        # allowlist is populated by validate_enterprise() at connect time, and
+        # refilling it from config alone would publish an allowlist that has
+        # never been checked against the workspace this gateway authenticated as.
+        logger.debug("allowed_enterprise_ids reload skipped: workspace not validated")
+        return False
+    degraded = _load_allowed_team_ids()
+    if degraded:
+        logger.error(
+            "slack.allowed_enterprise_ids reload read a degraded config; "
+            "admitting no origin until it is readable"
+        )
+    else:
+        logger.info(
+            "slack.allowed_enterprise_ids reloaded (%d id(s) admitted, allowlist %s)",
+            len(_allowed_team_ids),
+            "configured" if _allowlist_configured else "unconfigured",
+        )
+    sel().log_api_access(
+        caller="config",
+        operation="slack.allowed_team_ids_reload",
+        outcome="denied" if degraded else "allowed",
+        source="config",
+        error="config_load_degraded_fail_closed" if degraded else "",
+    )
+    return degraded
+
+
 def _governance_posture_permits_workspace(enterprise_id: str, team_id: str) -> bool:
     """Check the workspace against ``channels.posture.slack.allowed_enterprise_ids``.
 

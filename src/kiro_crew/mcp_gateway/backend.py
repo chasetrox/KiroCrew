@@ -62,7 +62,10 @@ from kiro_crew.mcp_gateway.image_budget import (
     parse_image_bearing_frame,
     rewrite_image_frame,
 )
-from kiro_crew.mcp_gateway.pool import READ_BUFFER_LIMIT_BYTES, RESPONSE_SPILL_THRESHOLD_BYTES
+from kiro_crew.mcp_gateway.pool import (
+    READ_BUFFER_LIMIT_BYTES,
+    response_spill_threshold_bytes,
+)
 from kiro_crew.mcp_gateway.spill import maybe_spill_response
 from kiro_crew.mcp_gateway.tool_surface import ToolSurface, project_tool_surface
 from kiro_crew.security import redact
@@ -1964,14 +1967,20 @@ class Backend:
                 # tool result doesn't balloon the shared daemon's memory or the
                 # agent's context. Offloaded to the maintenance executor (short
                 # filesystem I/O); a spill failure falls back to the raw line.
-                if len(line) > RESPONSE_SPILL_THRESHOLD_BYTES:
+                # The threshold is resolved per response rather than read from the
+                # import-time global, so a config change applies without restarting
+                # the daemon; one resolve serves both the test and the argument so
+                # a write mid-response cannot spill against one value and truncate
+                # against another.
+                spill_threshold = response_spill_threshold_bytes()
+                if len(line) > spill_threshold:
                     try:
                         line = await asyncio.get_running_loop().run_in_executor(
                             maintenance_executor(),
                             maybe_spill_response,
                             line,
                             self.pool_key.server_name,
-                            RESPONSE_SPILL_THRESHOLD_BYTES,
+                            spill_threshold,
                         )
                     except Exception:
                         logger.debug("spill-to-file failed; routing raw line", exc_info=True)

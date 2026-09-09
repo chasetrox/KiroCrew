@@ -3629,7 +3629,7 @@ class TestRunStdoutPump:
     async def test_over_threshold_line_is_spilled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(backend_mod, "RESPONSE_SPILL_THRESHOLD_BYTES", 8)
+        monkeypatch.setattr(backend_mod, "response_spill_threshold_bytes", lambda: 8)
         monkeypatch.setattr(
             backend_mod, "maybe_spill_response",
             lambda line, server, threshold: _line({"id": "gw-1", "result": "spilled"}),
@@ -3645,7 +3645,7 @@ class TestRunStdoutPump:
     async def test_spill_failure_routes_the_raw_line(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(backend_mod, "RESPONSE_SPILL_THRESHOLD_BYTES", 8)
+        monkeypatch.setattr(backend_mod, "response_spill_threshold_bytes", lambda: 8)
 
         def _boom(line: bytes, server: str, threshold: int) -> bytes:
             raise OSError("disk full")
