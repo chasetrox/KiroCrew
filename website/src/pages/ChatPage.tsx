@@ -9,6 +9,7 @@ import { useImeGuard } from '../hooks/useImeGuard'
 import { useRailWidth } from '../hooks/useRailWidth'
 import { SETTINGS_DEFAULT_MODEL_ID } from '../hooks/useSettingHighlight'
 import { settingsPath } from '../components/settingsPath'
+import { KIRO_SIGN_IN_SETTINGS_TAB, KIRO_SIGN_IN_SETTING_ID } from './settings/KiroSignInCard'
 import { isTouchDevice } from '../utils/isTouchDevice'
 import { agentOrDefaultLabel } from '../utils/agentLabel'
 import { toApiDecision } from '../utils/approvalDecision'
@@ -4397,6 +4398,12 @@ export default function ChatPage({ mode, embedded, embedMode, popout, noUrlSync 
   const openDefaultModelSetting = useCallback(() => {
     navigate(settingsPath({ tab: 'chat', highlight: SETTINGS_DEFAULT_MODEL_ID }))
   }, [navigate])
+  // The Kiro sign-in card (an `auth_required` error row's fix) lives on the
+  // full dashboard's Settings > Overview; same surface rule as the Default
+  // Model link above.
+  const openKiroSignIn = useCallback(() => {
+    navigate(settingsPath({ tab: KIRO_SIGN_IN_SETTINGS_TAB, highlight: KIRO_SIGN_IN_SETTING_ID }))
+  }, [navigate])
 
   const handleContinue = useCallback(() => {
     if (!activeSlot || continuing || !continuable) return
@@ -5928,6 +5935,7 @@ export default function ChatPage({ mode, embedded, embedMode, popout, noUrlSync 
       onContinue: handleContinue,
       onPickModel: openModelPickerFromError,
       onOpenDefaultModel: embedded || popout ? undefined : openDefaultModelSetting,
+      onOpenSignIn: embedded || popout ? undefined : openKiroSignIn,
       onSessionOpen: selectSessionTab,
       sessions: connected ? sessionTitles : undefined,
       activeSession: activeSlot || undefined,
@@ -5965,7 +5973,7 @@ export default function ChatPage({ mode, embedded, embedMode, popout, noUrlSync 
       bubble,
     ])
     return { renderers, fallback: bubble }
-  }, [slotRunning, handleFileOpen, handleArtifactOpen, selectSessionTab, sessionTitles, connected, handleFork, handleQuote, handleAsk, chatConfig, activeSlot, regenerating, handleRegenerate, handleEditResend, slotHasMore, loadingOlder, cursorIsForActiveSlot, slotOldestIndex, handleLoadEarlier, renderUserContentCb, highlightTs, activeSlotTitle, mode, embedded, popout, handleOpenDiff, handlePlanFromHere, planTaskId, artifactPaths, automationId, toolDisclosure, setToolDisclosureFor, linkPreviewsOn, socialShareOn, voiceRecoverySlot, handleSubagentPanelOpen, isPinned, handleTogglePinForMessage, showRefusedPress, transcriptHot, revealAppInPanel, continuable, interrupted, continuing, handleContinue, openModelPickerFromError, openDefaultModelSetting, handleFolderOpen, handleSpeak, handleApplyPlan, mcpAppPanel])
+  }, [slotRunning, handleFileOpen, handleArtifactOpen, selectSessionTab, sessionTitles, connected, handleFork, handleQuote, handleAsk, chatConfig, activeSlot, regenerating, handleRegenerate, handleEditResend, slotHasMore, loadingOlder, cursorIsForActiveSlot, slotOldestIndex, handleLoadEarlier, renderUserContentCb, highlightTs, activeSlotTitle, mode, embedded, popout, handleOpenDiff, handlePlanFromHere, planTaskId, artifactPaths, automationId, toolDisclosure, setToolDisclosureFor, linkPreviewsOn, socialShareOn, voiceRecoverySlot, handleSubagentPanelOpen, isPinned, handleTogglePinForMessage, showRefusedPress, transcriptHot, revealAppInPanel, continuable, interrupted, continuing, handleContinue, openModelPickerFromError, openDefaultModelSetting, openKiroSignIn, handleFolderOpen, handleSpeak, handleApplyPlan, mcpAppPanel])
 
   const renderMessage = useCallback((i: number, m: ChatMessage) => {
     // Key identity rules (clientTs preference + streaming->assistant role

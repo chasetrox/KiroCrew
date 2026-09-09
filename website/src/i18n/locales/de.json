@@ -6467,7 +6467,10 @@
       "loopback_use_code": "Stattdessen einen Code verwenden",
       "loopback_slow_hint": "Dauert es lange? Wenn die Anmeldeseite diesen Computer nicht erreicht, wechsle zu einem Code — der funktioniert von jedem Gerät.",
       "loopback_fell_back": "Die Anmeldung konnte nicht direkt auf diesen Computer zurückkommen, deshalb gibt es stattdessen einen Code.",
-      "cancel_unsettled": "Die Anmeldung konnte nicht abgebrochen werden. Sie läuft noch – wähle dieselbe Option erneut, um es noch einmal zu versuchen."
+      "cancel_unsettled": "Die Anmeldung konnte nicht abgebrochen werden. Sie läuft noch – wähle dieselbe Option erneut, um es noch einmal zu versuchen.",
+      "card_intro": "Agenten laufen unter diesem Kiro-Konto, unabhängig von einer kiro-cli-Anmeldung.",
+      "previous_sign_in_not_removed": "Angemeldet, aber die vorherige Anmeldung konnte nicht entfernt werden",
+      "previous_sign_in_not_removed_body": "Das neue Konto ist gespeichert, aber das Konto, von dem du gewechselt hast, ist noch da und hat Vorrang. Melde dich dort ab und prüfe dann die hier angezeigte Anmeldung."
     },
     "kiroPrerequisiteGate": {
       "agent_specs_missing": "Agent-Spezifikationen fehlen",
@@ -9324,7 +9327,9 @@
         "pick_model_hint": "Die Modellauswahl öffnen, eines der Modelle wählen, die dein Konto nutzen kann, und dann die Nachricht erneut senden.",
         "both_hint": "Beides tun: „{{pick}}“ behebt diese Sitzung, „{{default}}“ verhindert, dass neue Sitzungen mit demselben Modell starten, falls es als Standard gesetzt ist. Danach die Nachricht erneut senden.",
         "elsewhere_hint": "Die Modellauswahl und Einstellungen → Chat sind im Haupt-Chatfenster. Dort ein Modell wählen und das Standardmodell ändern.",
-        "elsewhere_settings_hint": "Einstellungen → Chat ist im Haupt-Chatfenster. Dort das Standardmodell ändern."
+        "elsewhere_settings_hint": "Einstellungen → Chat ist im Haupt-Chatfenster. Dort das Standardmodell ändern.",
+        "sign_in": "Bei Kiro anmelden",
+        "sign_in_hint": "Öffne Einstellungen → Übersicht → Kiro-Anmeldung, melde dich erneut an und sende deine Nachricht noch einmal."
       },
       "folderPanel": {
         "clear_search": "Suche löschen",
@@ -12191,9 +12196,9 @@
       "view_last_result": "Letztes Ergebnis ansehen",
       "writes_badge_tooltip": "Der Job dieser Vorlage pusht Branches, öffnet PRs oder bearbeitet Issues. Ihre Schutzmaßnahmen sind Anweisungen an den Agenten, keine erzwungene Richtlinie.",
       "writes_notice": "Der Job dieser Vorlage pusht Branches, öffnet PRs oder bearbeitet Issues in Ihren Repos. Die Grenzen im Prompt (zum Beispiel „niemals auf den Standardbranch pushen“) sind Anweisungen an den Agenten, keine erzwungene Richtlinie — prüfen Sie den Prompt, bevor Sie speichern.",
-      "template_updated_notice": "Die Vorlage {{name}} wurde ge\u00e4ndert, seit du diesen Job gespeichert hast. Deine gespeicherte Nachricht ist unver\u00e4ndert.",
-      "template_updated_dismiss": "Schlie\u00dfen",
-      "template_updated_dismiss_hint": "Schlie\u00dfen (erscheint erneut, wenn sich die Vorlage wieder \u00e4ndert)",
+      "template_updated_notice": "Die Vorlage {{name}} wurde geändert, seit du diesen Job gespeichert hast. Deine gespeicherte Nachricht ist unverändert.",
+      "template_updated_dismiss": "Schließen",
+      "template_updated_dismiss_hint": "Schließen (erscheint erneut, wenn sich die Vorlage wieder ändert)",
       "writes_to_your_repos": "Schreibt in Ihre Repos",
       "script_source": "Skript-Quellcode",
       "script_source_download": "Skript herunterladen",
@@ -14069,6 +14074,26 @@
         "tokens_count_one": "{{count}} Zugriffstoken",
         "tokens_count_other": "{{count}} Zugriffstoken",
         "could_not_read_webhook_status": "Webhook-Status konnte nicht gelesen werden — prüfe, ob das Gateway läuft"
+      },
+      "kiroSignInCard": {
+        "title": "Kiro-Anmeldung",
+        "registry_description": "Beim Kiro-Konto anmelden, unter dem die Agenten laufen, oder davon abmelden.",
+        "checking": "Anmeldung wird geprüft…",
+        "signed_in_with": "Angemeldet mit {{provider}}",
+        "signed_in_body": "Agenten laufen unter diesem Kiro-Konto. Das Zugriffstoken wird automatisch erneuert.",
+        "access_token_expires": "Zugriffstoken läuft {{when}} ab ({{at}}).",
+        "expired_renews_on_next_use": "Das Zugriffstoken ist abgelaufen und wird erneuert, sobald ein Agent es das nächste Mal benötigt.",
+        "expired_no_refresh": "Das Zugriffstoken ist abgelaufen, und es gibt nichts, womit es erneuert werden könnte.",
+        "refresh_rejected": "Kiro hat die Erneuerung dieser Anmeldung abgelehnt.",
+        "sign_in_expired": "Anmeldung abgelaufen",
+        "sign_in_expired_body": "Die {{provider}}-Anmeldung ist nicht mehr gültig. Agenten melden „nicht angemeldet“, bis du dich erneut anmeldest – es gibt keinen automatischen Rückfall auf eine kiro-cli-Anmeldung.",
+        "sign_in_again": "Erneut anmelden",
+        "switch_account": "Konto wechseln",
+        "sign_out": "Abmelden",
+        "takes_effect_next_process": "Gilt für ab jetzt gestartete Agentenprozesse; laufende Sitzungen übernehmen es beim nächsten Zug.",
+        "could_not_sign_out": "Abmelden nicht möglich",
+        "keep_current_sign_in": "Aktuelle Anmeldung behalten",
+        "signed_in_body_no_refresh": "Agenten laufen unter diesem Kiro-Konto. Diese Anmeldung hat kein Refresh-Token und kann sich nicht selbst erneuern – melde dich vor dem Ablauf erneut an."
       }
     },
     "settingsPage": {

@@ -844,7 +844,10 @@ class AcpProvider(LLMProvider):
                 # (it is the value passed as ``acp_backend`` above) — so the
                 # sign-in advice names the harness that actually failed to
                 # authenticate rather than assuming kiro-cli.
-                raise AcpAuthRequired(host_auth.signed_out_message(self._client.backend)) from exc
+                raise AcpAuthRequired(
+                    host_auth.signed_out_message(self._client.backend),
+                    backend=self._client.backend,
+                ) from exc
             raise
         finally:
             # subprocess launch + ACP `initialize` handshake
@@ -941,7 +944,8 @@ class AcpProvider(LLMProvider):
                     except AcpRuntimeError as exc:
                         if runtime.saw_not_logged_in():
                             raise AcpAuthRequired(
-                                host_auth.signed_out_message(self._client.backend)
+                                host_auth.signed_out_message(self._client.backend),
+                                backend=self._client.backend,
                             ) from exc
                         raise
                 try:
@@ -953,7 +957,8 @@ class AcpProvider(LLMProvider):
                 except AcpRuntimeError as exc:
                     if runtime.saw_not_logged_in():
                         raise AcpAuthRequired(
-                            host_auth.signed_out_message(self._client.backend)
+                            host_auth.signed_out_message(self._client.backend),
+                            backend=self._client.backend,
                         ) from exc
                     raise
                 finally:

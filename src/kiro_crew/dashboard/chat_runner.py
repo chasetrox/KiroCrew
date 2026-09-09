@@ -306,6 +306,7 @@ from kiro_crew.dashboard.chat_utils import (  # noqa: E402
     _POSTTOKEN_RECOVER_MSG,
     _PROMISE_ONLY_CONTINUE_MSG,
     _SYNTHETIC_RECOVERY_MSGS,
+    AUTH_REQUIRED_KIND,
     CRON_NOTIFICATION_KIND,
     EMPTY_RUNG_CONTINUE,
     EMPTY_RUNG_GIVE_UP,
@@ -3930,6 +3931,23 @@ def _model_unentitled_meta(exc: BaseException) -> dict[str, object] | None:
     if not model_is_unusable(rejected, getattr(exc, "advertised", None)):
         return None
     return {"kind": MODEL_UNENTITLED_KIND}
+
+
+def _terminal_error_meta(exc: BaseException) -> dict[str, object] | None:
+    """Row-level kind for a terminal ACP error, or None for a plain error row.
+
+    Two structural tags, both set by ``_raise_acp_error`` from the raw frame and
+    read here without looking at the prose: a model-entitlement rejection
+    (``rejected_model`` / ``advertised``) and a sign-in failure
+    (``auth_required``). The entitlement verdict wins when both are set, because
+    its fix (pick a served model) is the one the prose describes.
+    """
+    unentitled = _model_unentitled_meta(exc)
+    if unentitled is not None:
+        return unentitled
+    if getattr(exc, "auth_required", False):
+        return {"kind": AUTH_REQUIRED_KIND}
+    return None
 
 
 def _should_suppress_requeue(slot) -> bool:
@@ -11867,7 +11885,13 @@ async def _run_chat(
             slot.append("assistant", _redacted, "msg msg-a")
             _append_redaction_notice(slot, _redacted)
         _auth_msg = str(exc)
-        slot.append("error", _auth_msg, "msg msg-err")
+        # Stamped with a kind (live broadcast `kind`, rebuilt transcript
+        # `meta.kind`) so the frontend can offer the fix -- a deep link to the
+        # Kiro sign-in card -- instead of a Continue button that would hit the
+        # same wall. The exception decides (from the harness that raised it)
+        # whether that card IS the fix; on a harness with its own credential
+        # store the row stays a plain error. The prose is unchanged.
+        slot.append("error", _auth_msg, "msg msg-err", meta=_terminal_error_meta(exc))
         _mark_kiro_signed_out(state)
         await _deliver_auth_error_to_slack(state, slot, sessions, session_key, _auth_msg)
     except AcpProcessDied as exc:
@@ -12493,7 +12517,9 @@ async def _run_chat(
                 # the same evidence the formatter used — the rejected id is
                 # absent from the session's advertised list — never from the
                 # prose, which is what a copy edit or translation would move.
-                _unentitled_meta = _model_unentitled_meta(exc)
+                # The same seam carries the sign-in tag: a session the upstream
+                # rejected gets a "Sign in to Kiro" affordance instead.
+                _unentitled_meta = _terminal_error_meta(exc)
                 slot.append(
                     "error",
                     f"⏱️ {_err_text}" if "timed out" in _msg else f"❌ {_err_text}",

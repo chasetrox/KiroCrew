@@ -9,6 +9,7 @@ import type { WakaTimeStats } from '../api/client'
 import { Card, CardTitle, StatCard, Btn } from '../components/ui'
 import { TunnelStatus } from '../components/TunnelStatus'
 import { TailnetMobileCard } from '../components/TailnetMobileCard'
+import { KiroSignInCard } from './settings/KiroSignInCard'
 import ErrorBoundary from '../components/ErrorBoundary'
 import ErrorNotice from '../components/ErrorNotice'
 import { getOverviewStatCards } from './overviewStatCards'
@@ -273,6 +274,18 @@ export default function OverviewPage() {
           )
         })}
       </div>
+
+      {/* Kiro sign-in. First among the guided cards because it decides WHICH
+          identity every agent process runs as; a lapsed or missing sign-in is
+          the one Overview fact the rest of the dashboard cannot work around.
+          Same isolation and suppression contract as the tailnet card below. */}
+      {!isOverviewBuiltinSuppressed('kiro-sign-in') && (
+        <ErrorBoundary scope="overview-kiro-sign-in" fallback={null}>
+          <div className="mb-6">
+            <KiroSignInCard />
+          </div>
+        </ErrorBoundary>
+      )}
 
       {/* Mobile access. Above the summary cards and full width, because it is a
           guided sequence rather than a metric: it owns the one next action, and

@@ -6365,7 +6365,10 @@
       "loopback_use_code": "改用验证码",
       "loopback_slow_hint": "等了很久？如果登录页无法连回这台电脑，请改用验证码——它在任何设备上都可用。",
       "loopback_fell_back": "登录结果无法直接回到这台电脑，所以改为使用验证码。",
-      "cancel_unsettled": "无法取消登录。登录仍在进行中，请再次点击同一选项重试。"
+      "cancel_unsettled": "无法取消登录。登录仍在进行中，请再次点击同一选项重试。",
+      "card_intro": "Agent 将以这个 Kiro 账号运行，不再依赖 kiro-cli 的登录。",
+      "previous_sign_in_not_removed": "已登录，但无法移除之前的登录",
+      "previous_sign_in_not_removed_body": "新账号已保存，但你切换前的那个账号仍然存在且优先生效。请先将其登出，再确认此处显示的登录。"
     },
     "kiroPrerequisiteGate": {
       "agent_specs_missing": "缺少代理规范",
@@ -9193,7 +9196,9 @@
         "pick_model_hint": "打开模型选择器，从账号可用的模型中选一个，然后重新发送消息。",
         "both_hint": "两步都要做：“{{pick}}”修好本会话，“{{default}}”在默认模型指向同一个模型时，让新会话不再从它开始。然后重新发送你的消息。",
         "elsewhere_hint": "模型选择器和“设置 → 对话”在主对话窗口里。请到那里选择模型并更改默认模型。",
-        "elsewhere_settings_hint": "“设置 → 对话”在主对话窗口里。请到那里更改默认模型。"
+        "elsewhere_settings_hint": "“设置 → 对话”在主对话窗口里。请到那里更改默认模型。",
+        "sign_in": "登录 Kiro",
+        "sign_in_hint": "打开“设置 → 概览 → Kiro 登录”重新登录，然后重新发送消息。"
       },
       "folderPanel": {
         "clear_search": "清除搜索",
@@ -12020,9 +12025,9 @@
       "view_last_result": "查看最近一次结果",
       "writes_badge_tooltip": "此模板的定时任务会推送分支、开 PR 或修改 issue。它的防护约束只是对代理的指示，并非强制策略。",
       "writes_notice": "此模板的定时任务会在你的仓库里推送分支、开 PR 或修改 issue。提示词里的限制（例如“绝不推送到默认分支”）只是对代理的指示，并非强制策略 — 保存前请先看一遍提示词。",
-      "template_updated_notice": "\u81ea\u4f60\u4fdd\u5b58\u6b64\u4efb\u52a1\u4ee5\u6765\uff0c{{name}} \u6a21\u677f\u5df2\u53d8\u66f4\u3002\u4f60\u4fdd\u5b58\u7684\u6d88\u606f\u672a\u53d8\u3002",
-      "template_updated_dismiss": "\u5173\u95ed",
-      "template_updated_dismiss_hint": "\u5173\u95ed\uff08\u6a21\u677f\u518d\u6b21\u53d8\u66f4\u65f6\u91cd\u65b0\u663e\u793a\uff09",
+      "template_updated_notice": "自你保存此任务以来，{{name}} 模板已变更。你保存的消息未变。",
+      "template_updated_dismiss": "关闭",
+      "template_updated_dismiss_hint": "关闭（模板再次变更时重新显示）",
       "writes_to_your_repos": "会写入你的仓库",
       "script_source": "脚本源代码",
       "script_source_download": "下载脚本",
@@ -13893,6 +13898,26 @@
         "manage_webhooks": "管理 webhook",
         "tokens_count_other": "{{count}} 个访问令牌",
         "could_not_read_webhook_status": "无法读取 webhook 状态 — 检查网关是否正在运行"
+      },
+      "kiroSignInCard": {
+        "title": "Kiro 登录",
+        "registry_description": "登录 agent 所使用的 Kiro 账号，或从中登出。",
+        "checking": "正在检查登录状态…",
+        "signed_in_with": "已通过 {{provider}} 登录",
+        "signed_in_body": "Agent 以这个 Kiro 账号运行。访问令牌会自动续期。",
+        "access_token_expires": "访问令牌 {{when}} 到期（{{at}}）。",
+        "expired_renews_on_next_use": "访问令牌已到期，下次有 agent 需要时会自动续期。",
+        "expired_no_refresh": "访问令牌已到期，且没有可用于续期的凭据。",
+        "refresh_rejected": "Kiro 拒绝为此登录续期。",
+        "sign_in_expired": "登录已失效",
+        "sign_in_expired_body": "{{provider}} 登录已不再有效。在你重新登录之前，agent 会报告未登录——不会自动退回到 kiro-cli 的登录。",
+        "sign_in_again": "重新登录",
+        "switch_account": "切换账号",
+        "sign_out": "登出",
+        "takes_effect_next_process": "对此后启动的 agent 进程生效；正在运行的会话会在下一轮对话时切换。",
+        "could_not_sign_out": "无法登出",
+        "keep_current_sign_in": "保留当前登录",
+        "signed_in_body_no_refresh": "Agent 以这个 Kiro 账号运行。此登录没有刷新令牌，无法自动续期——请在到期前重新登录。"
       }
     },
     "settingsPage": {

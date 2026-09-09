@@ -82,6 +82,7 @@ from kiro_crew.acp.types import (
     ACP_BACKEND_CODEX,
     ACP_BACKEND_KIRO,
     ACP_BACKENDS_ADVERTISED_MODEL_SELECTION,
+    ACP_BACKENDS_HOST_AUTH_CALLBACK,
     ACP_BACKENDS_INTERNAL_SANDBOX,
     ACP_BACKENDS_MEMBER_DISPATCH,
     ACP_BACKENDS_MODEL_VIA_CONFIG_OPTION,
@@ -1683,6 +1684,10 @@ class AcpError(Exception):
             self.rejected_model: str | None = None
         if not hasattr(self, "advertised"):
             self.advertised: list[str] = []
+        # Sign-in failure tag, set by :func:`_raise_acp_error` when the raw frame
+        # is a session-expiry / rejected-credential answer, so the dashboard's
+        # error row can offer the Kiro sign-in card instead of a retry.
+        self.auth_required: bool = False
 
 
 class AcpTimeoutError(AcpError):
@@ -1707,12 +1712,22 @@ class AcpProcessDied(AcpError):  # noqa: N818
 
 
 class AcpAuthRequired(AcpError):  # noqa: N818
-    """kiro-cli is not authenticated — the user must run ``kiro-cli login``.
+    """The harness is not authenticated — the user must sign in again.
 
     Non-retryable: respawning the process hits the same wall, so callers must
     surface the actionable message and skip the retry ladder rather than
     reset-and-requeue the turn.
+
+    ``backend`` decides whose sign-in fixes it. Only a harness that authenticates
+    through Crew's own identity (``ACP_BACKENDS_HOST_AUTH_CALLBACK``, harness
+    parity H6) is tagged ``auth_required`` so the dashboard offers the Kiro
+    sign-in card; for every other harness that card would sign in the wrong
+    thing, so the row stays a plain error carrying that harness's own remedy.
     """
+
+    def __init__(self, message: str = "", *, backend: str = "") -> None:
+        super().__init__(message)
+        self.auth_required = backend in ACP_BACKENDS_HOST_AUTH_CALLBACK
 
 
 class AcpToolGateUnroutable(AcpError):  # noqa: N818
@@ -2744,6 +2759,23 @@ def _raise_acp_error(
     if rejected:
         err.rejected_model = rejected
         err.advertised = list(available_models or [])
+    # Tag a session-expiry / rejected-credential answer so the dashboard can offer
+    # the fix -- the Kiro sign-in card -- instead of a Continue that hits the same
+    # wall. Decided from the raw frame, never from the prose, and only when the
+    # formatter would have reached its sign-in branch: a Bedrock-named credential
+    # exception (`_RE_AUTH`, a different remedy) or a usage-limit answer that
+    # happens to carry a 401/403 is not a Kiro sign-in problem. Gated on the
+    # harness signing in through Crew's own identity (harness parity H6): for a
+    # harness with its own credential store the card would sign in the wrong
+    # thing, so its 401 stays a plain error carrying that harness's remedy.
+    if (
+        not rejected
+        and backend in ACP_BACKENDS_HOST_AUTH_CALLBACK
+        and _is_session_expired(raw_data)
+        and not _RE_AUTH.search(raw_data)
+        and not _RE_USAGE_LIMIT.search(raw_data)
+    ):
+        err.auth_required = True
     raise err
 
 

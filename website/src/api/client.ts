@@ -1994,9 +1994,9 @@ export interface KiroCreditUsage {
 
 export interface KasLoginStatus {
   authenticated: boolean
-  /** Provider of the active sign-in (e.g. 'google', 'github', 'builder_id'), null when signed out. */
+  /** Provider of the active sign-in as the token records it ('Google', 'Github', 'BuilderId', 'Enterprise'), '' when signed out. */
   provider: string | null
-  /** Human-readable account identity (email / profile ARN), null when signed out. */
+  /** Which vault slot the sign-in occupies ('social' | 'builder_id' | 'identity_center' | 'external_idp'); the value `kasLoginLogout` takes. '' when signed out. */
   identity: string | null
   /**
    * How a sign-in can return to this gateway. 'loopback' means the browser and
@@ -2005,6 +2005,26 @@ export interface KasLoginStatus {
    * approves a short code in their own browser (no callback required).
    */
   transport: 'loopback' | 'device'
+  /** ISO-8601 UTC instant the stored access token stops working; null when signed out. */
+  expires_at: string | null
+  /** True when the access token is at or inside the engine's refresh margin. */
+  expired: boolean
+  /** True when a refresh token is stored to renew the access token with. */
+  has_refresh_token: boolean
+  /**
+   * True when the issuer refused the last refresh: the sign-in looks renewable
+   * but is not, and only signing in again fixes it. Cleared by any new
+   * credential landing in the slot.
+   */
+  refresh_rejected: boolean
+  /**
+   * The spawn-time verdict: can this identity still answer an agent's
+   * credential request without a sign-in? Same predicate `kirocrew doctor`
+   * prints. Independent of `refresh_rejected` on purpose: a rejected refresh
+   * is reported to the user, never used to hand the agent back to kiro-cli's
+   * login behind their back.
+   */
+  usable: boolean
 }
 
 export interface KasLoginDeviceSession {
@@ -2020,9 +2040,17 @@ export interface KasLoginDeviceSession {
 
 export interface KasLoginPollResult {
   status: 'pending' | 'authorized' | 'expired' | 'error'
-  /** Machine-readable failure code — error responses carry one too. */
+  /**
+   * Machine-readable failure code — error responses carry one too. On an
+   * `authorized` answer it can be `previous_identity_not_removed`: the new
+   * credential landed but the slot named by `replaces` could not be deleted,
+   * so the previous account still takes precedence until it is signed out.
+   */
   code?: string
   error?: string
+  /** On `authorized` after a begin with `replaces`: every other stored slot the
+   *  switch removed so the new account is the one the store resolves to. */
+  replaced?: string[]
 }
 
 /**
@@ -2438,7 +2466,15 @@ export const api = {
   // CSRF/audit reasons as the spec repair above. Error responses carry a
   // machine-readable `code` field alongside the human message.
   kasLoginStatus: () => get('/api/kas-login').then(j) as Promise<KasLoginStatus>,
-  kasLoginBeginDevice: (provider: string, extra?: { start_url?: string; region?: string }) =>
+  // `replaces` names the vault slot (`KasLoginStatus.identity`) a signed-in
+  // user is switching away from; the gateway removes it only once THIS login's
+  // credential has landed, so a failed switch leaves the old account intact
+  // and a successful one cannot leave it shadowing the new account (the store
+  // resolves by slot priority, not recency).
+  kasLoginBeginDevice: (
+    provider: string,
+    extra?: { start_url?: string; region?: string; replaces?: string },
+  ) =>
     post('/api/kas-login/device', { provider, ...(extra ?? {}) }).then(
       j,
     ) as Promise<KasLoginDeviceSession>,
@@ -2447,13 +2483,20 @@ export const api = {
   // Loopback begin answers 409 `loopback_unavailable` when this install shape
   // cannot receive the callback (or every allowlisted port is busy); the gate
   // treats that as "start the device flow instead", not as a failure.
-  kasLoginBeginLoopback: (provider: string) =>
-    post('/api/kas-login/loopback', { provider }).then(j) as Promise<KasLoginLoopbackSession>,
+  kasLoginBeginLoopback: (provider: string, extra?: { replaces?: string }) =>
+    post('/api/kas-login/loopback', { provider, ...(extra ?? {}) }).then(
+      j,
+    ) as Promise<KasLoginLoopbackSession>,
   // Idempotent: releases a loopback listener's port early on every start-over path.
   kasLoginCancel: (login_id: string) =>
     post('/api/kas-login/cancel', { login_id }).then(j) as Promise<{ ok: boolean }>,
+  // Signs out of Crew's Kiro identity: deletes the named slot
+  // (`KasLoginStatus.identity`, the one the card shows) AND every other stored
+  // slot, so no lower-priority account can quietly take over, then recycles
+  // running agent processes. Answers `{ok}`; the card re-reads status
+  // afterwards, which is the single authority on state.
   kasLoginLogout: (identity: string) =>
-    post('/api/kas-login/logout', { identity }).then(j) as Promise<KasLoginStatus>,
+    post('/api/kas-login/logout', { identity }).then(j) as Promise<{ ok: boolean }>,
   onboardingImportScan: () =>
     get('/api/onboarding/import/scan').then(j) as Promise<AgentImportScanResponse>,
   onboardingImportApply: (body: AgentImportApplyRequest) =>

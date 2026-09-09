@@ -2055,7 +2055,10 @@
       "loopback_use_code": "Use a code instead",
       "loopback_slow_hint": "Taking a while? If the sign-in page can't reach this computer, switch to a code — it works from any device.",
       "loopback_fell_back": "The sign-in couldn't come back to this computer directly, so here's a code instead.",
-      "cancel_unsettled": "Couldn’t cancel the sign-in. It is still active — press the same option again to retry."
+      "cancel_unsettled": "Couldn’t cancel the sign-in. It is still active — press the same option again to retry.",
+      "card_intro": "Agents run as this Kiro account, without depending on a kiro-cli login.",
+      "previous_sign_in_not_removed": "Signed in, but the previous sign-in could not be removed",
+      "previous_sign_in_not_removed_body": "The new account is stored, but the one you were switching away from is still there and takes precedence. Sign out of it, then check the sign-in shown here."
     },
     "kiroPrerequisiteGate": {
       "agent_specs_missing": "Agent specs missing",
@@ -3759,6 +3762,10 @@
       },
       "pins": {
         "copy_failed": "Copy failed"
+      },
+      "errorCard": {
+        "sign_in": "Sign in to Kiro",
+        "sign_in_hint": "Open Settings → Overview → Kiro sign-in and sign in again, then send your message again."
       }
     },
     "chatPage": {
@@ -5884,6 +5891,26 @@
         "engine_download_failed": "Could not start the browser download.",
         "install_request_failed": "Could not start the install.",
         "token_save_failed": "Could not save the extension token."
+      },
+      "kiroSignInCard": {
+        "title": "Kiro sign-in",
+        "registry_description": "Sign in to the Kiro account your agents run as, or sign out of it.",
+        "checking": "Checking sign-in…",
+        "signed_in_with": "Signed in with {{provider}}",
+        "signed_in_body": "Agents run as this Kiro account. The access token is renewed automatically.",
+        "access_token_expires": "Access token expires {{when}} ({{at}}).",
+        "expired_renews_on_next_use": "The access token has expired and will be renewed the next time an agent needs it.",
+        "expired_no_refresh": "The access token has expired and there is nothing to renew it with.",
+        "refresh_rejected": "Kiro refused to renew this sign-in.",
+        "sign_in_expired": "Sign-in expired",
+        "sign_in_expired_body": "The {{provider}} sign-in is no longer valid. Agents will report that they are not signed in until you sign in again — nothing falls back to a kiro-cli login on its own.",
+        "sign_in_again": "Sign in again",
+        "switch_account": "Switch account",
+        "sign_out": "Sign out",
+        "takes_effect_next_process": "Applies to agent processes started from now on; running sessions pick it up at their next turn.",
+        "could_not_sign_out": "Could not sign out",
+        "keep_current_sign_in": "Keep the current sign-in",
+        "signed_in_body_no_refresh": "Agents run as this Kiro account. This sign-in has no refresh token, so it cannot renew itself — sign in again before it expires."
       }
     },
     "systemPage": {},

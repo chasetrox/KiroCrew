@@ -6365,7 +6365,10 @@
       "loopback_use_code": "代わりにコードを使う",
       "loopback_slow_hint": "時間がかかっていますか？サインインページがこのコンピューターに到達できない場合は、コードに切り替えてください。どの端末からでも使えます。",
       "loopback_fell_back": "サインインの結果がこのコンピューターに直接戻れなかったため、代わりにコードを表示しています。",
-      "cancel_unsettled": "サインインをキャンセルできませんでした。サインインはまだ有効です。同じ項目をもう一度押して再試行してください。"
+      "cancel_unsettled": "サインインをキャンセルできませんでした。サインインはまだ有効です。同じ項目をもう一度押して再試行してください。",
+      "card_intro": "エージェントはこの Kiro アカウントとして動作し、kiro-cli のログインには依存しません。",
+      "previous_sign_in_not_removed": "サインインしましたが、以前のサインインを削除できませんでした",
+      "previous_sign_in_not_removed_body": "新しいアカウントは保存されましたが、切り替え前のアカウントも残っており、そちらが優先されます。そのアカウントからサインアウトしてから、ここに表示されるサインインを確認してください。"
     },
     "kiroPrerequisiteGate": {
       "agent_specs_missing": "エージェント仕様が見つかりません",
@@ -9193,7 +9196,9 @@
         "pick_model_hint": "モデルピッカーを開き、アカウントで利用できるモデルを選んでから、メッセージをもう一度送信してください。",
         "both_hint": "両方を行ってください。「{{pick}}」でこのセッションを直し、「{{default}}」はデフォルトが同じモデルの場合に新しいセッションがそのモデルで始まらないようにします。その後、メッセージをもう一度送信してください。",
         "elsewhere_hint": "モデルピッカーと「設定 → チャット」はメインのチャットウィンドウにあります。そこでモデルを選び、デフォルトモデルを変更してください。",
-        "elsewhere_settings_hint": "「設定 → チャット」はメインのチャットウィンドウにあります。そこでデフォルトモデルを変更してください。"
+        "elsewhere_settings_hint": "「設定 → チャット」はメインのチャットウィンドウにあります。そこでデフォルトモデルを変更してください。",
+        "sign_in": "Kiro にサインイン",
+        "sign_in_hint": "「設定 → 概要 → Kiro サインイン」を開いて再度サインインし、メッセージをもう一度送信してください。"
       },
       "folderPanel": {
         "clear_search": "検索をクリア",
@@ -12020,9 +12025,9 @@
       "view_last_result": "最後の結果を表示",
       "writes_badge_tooltip": "このテンプレートのジョブは、ブランチをプッシュし、プルリクエストを開き、イシューを編集します。そのガードレールはエージェントへの指示であり、強制されるポリシーではありません。",
       "writes_notice": "このテンプレートのジョブは、リポジトリ内のブランチをプッシュし、プルリクエストを開き、イシューを編集します。プロンプト内の制限（例：「デフォルトブランチには絶対にプッシュしない」）はエージェントへの指示であり、強制されるポリシーではありません — 保存する前にプロンプトを確認してください。",
-      "template_updated_notice": "\u3053\u306e\u30b8\u30e7\u30d6\u3092\u4fdd\u5b58\u3057\u3066\u4ee5\u964d\u3001{{name}} \u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u304c\u5909\u66f4\u3055\u308c\u307e\u3057\u305f\u3002\u4fdd\u5b58\u6e08\u307f\u306e\u30e1\u30c3\u30bb\u30fc\u30b8\u306f\u5909\u308f\u3063\u3066\u3044\u307e\u305b\u3093\u3002",
-      "template_updated_dismiss": "\u9589\u3058\u308b",
-      "template_updated_dismiss_hint": "\u9589\u3058\u308b\uff08\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u304c\u518d\u3073\u5909\u66f4\u3055\u308c\u308b\u3068\u518d\u8868\u793a\uff09",
+      "template_updated_notice": "このジョブを保存して以降、{{name}} テンプレートが変更されました。保存済みのメッセージは変わっていません。",
+      "template_updated_dismiss": "閉じる",
+      "template_updated_dismiss_hint": "閉じる（テンプレートが再び変更されると再表示）",
       "writes_to_your_repos": "リポジトリへ書き込み",
       "script_source": "スクリプトのソース",
       "script_source_download": "スクリプトをダウンロード",
@@ -13893,6 +13898,26 @@
         "manage_webhooks": "Webhooks を管理",
         "tokens_count_other": "アクセストークン {{count}} 個",
         "could_not_read_webhook_status": "webhook の状態を取得できませんでした — ゲートウェイが起動していない可能性があります"
+      },
+      "kiroSignInCard": {
+        "title": "Kiro サインイン",
+        "registry_description": "エージェントが使用する Kiro アカウントにサインイン、またはサインアウトします。",
+        "checking": "サインイン状態を確認しています…",
+        "signed_in_with": "{{provider}} でサインイン済み",
+        "signed_in_body": "エージェントはこの Kiro アカウントとして動作します。アクセストークンは自動的に更新されます。",
+        "access_token_expires": "アクセストークンは {{when}} に期限切れになります（{{at}}）。",
+        "expired_renews_on_next_use": "アクセストークンは期限切れです。次にエージェントが必要としたときに更新されます。",
+        "expired_no_refresh": "アクセストークンは期限切れで、更新に使える資格情報がありません。",
+        "refresh_rejected": "Kiro がこのサインインの更新を拒否しました。",
+        "sign_in_expired": "サインインが失効しました",
+        "sign_in_expired_body": "{{provider}} のサインインは無効になりました。再度サインインするまで、エージェントは未サインインと報告します。kiro-cli のログインへ自動的に切り替わることはありません。",
+        "sign_in_again": "再度サインイン",
+        "switch_account": "アカウントを切り替え",
+        "sign_out": "サインアウト",
+        "takes_effect_next_process": "今後起動するエージェントプロセスに適用されます。実行中のセッションは次のターンで切り替わります。",
+        "could_not_sign_out": "サインアウトできませんでした",
+        "keep_current_sign_in": "現在のサインインを維持",
+        "signed_in_body_no_refresh": "エージェントはこの Kiro アカウントとして動作します。このサインインにはリフレッシュトークンがなく自動更新できません。期限切れになる前に再度サインインしてください。"
       }
     },
     "settingsPage": {
