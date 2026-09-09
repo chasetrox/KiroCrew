@@ -1951,6 +1951,103 @@ def process_descendants(pid: int) -> list[int]:
     return _descendants_from_parent_map(pid, parent_map)
 
 
+def attributed_descendants(root_pid: int, root_token: str) -> list[int]:
+    """*root_pid*'s descendants with EVERY parent-child edge attributed, not just the root.
+
+    :func:`created_after` compares one child against one parent. Applying it with the
+    ROOT's token for a whole flattened descendant list is weaker than it looks: it
+    asks "was this process created after the root", which every process started since
+    the root satisfies -- including a stale orphan that the parent map lists under a
+    RECYCLED INTERMEDIATE pid. Such an orphan is unrelated to this tree, often
+    belongs to the same user, and a caller acting on the set then terminates a
+    stranger's process tree irreversibly.
+
+    Walking level by level and attributing each edge against the parent it was
+    reached THROUGH separates them: a real grandchild was created after its own
+    parent, while the orphan of a recycled intermediate was created before the
+    process that now holds that number. A child failing its edge is dropped WITH ITS
+    SUBTREE -- everything below an unattributable edge is reached only through it, so
+    none of it is provably part of this tree either.
+
+    Still the token-only form: it needs no handles, so it serves the callers that
+    cannot hold an exact root handle. :func:`descendant_termination_handles` remains
+    the stronger answer where one IS available. A process whose creation identity
+    cannot be read at all is left alone rather than guessed at, exactly as
+    :func:`created_after` documents.
+
+    Best-effort like :func:`process_descendants`: an unreadable process table yields
+    an empty list rather than raising, and the SAME snapshot ordering rule applies --
+    call this BEFORE killing anything.
+    """
+
+    if type(root_pid) is not int or root_pid <= 1 or not root_token:
+        return []
+    try:
+        parent_map = _windows_process_parent_map() if IS_WINDOWS else _posix_process_parent_map()
+    except Exception:  # noqa: BLE001 - introspection must never break a kill path
+        return []
+
+    children_of: dict[int, list[int]] = {}
+    for child, parent in parent_map.items():
+        children_of.setdefault(parent, []).append(child)
+
+    out: list[int] = []
+    seen = {root_pid}
+    frontier = [(root_pid, root_token)]
+    while frontier:
+        next_frontier: list[tuple[int, str]] = []
+        for parent_pid, parent_token in frontier:
+            for child in sorted(children_of.get(parent_pid, ())):
+                if child in seen:
+                    continue
+                child_token = process_start_time(child)
+                if not child_token or not created_after(child_token, parent_token):
+                    # Unattributable edge: this child is not provably ours, and
+                    # nothing below it is reachable except through it.
+                    continue
+                seen.add(child)
+                out.append(child)
+                next_frontier.append((child, child_token))
+        frontier = next_frontier
+    return out
+
+
+def created_after(child_token: str, parent_token: str) -> bool:
+    """Whether a process the parent map lists under another is really its child.
+
+    The Toolhelp snapshot behind :func:`process_descendants` records a parent as a
+    bare pid, and Windows keeps that number after the parent dies. When the dead
+    parent's pid is later recycled, an unrelated process appears as a child of the
+    recycler -- and, being unrelated, is often one this user cannot terminate, so
+    ending it fails and a caller that treats the set as a tree draws the wrong
+    conclusion in whichever direction hurts it (killing a stranger, or calling a
+    foreign listener its own).
+
+    A genuine child was created after its parent, while such a stray was created
+    while the pid still belonged to the process it was born under, so comparing the
+    creation identities separates the two exactly. Both tokens are the creation
+    ``FILETIME`` as decimal text (:func:`process_start_time`); a token that is not
+    (nothing on Windows produces one) is not attributable, and the caller must leave
+    that process alone rather than act on a guess.
+
+    Lives HERE, beside the primitive whose staleness it compensates for, because
+    three callers need the same rule and a second spelling of it is how they drift:
+    the pod backend's ``stop``, ``pod.runtime.port_owner``, and the test harness's
+    Windows teardown. All three reach it through
+    :func:`attributed_descendants`, which applies this comparison to EVERY
+    parent-child edge -- applying it with only the ROOT's token admits a stale orphan
+    sitting under a recycled INTERMEDIATE pid, which also postdates the root.
+    :func:`descendant_termination_handles` is the stronger form still --
+    exact per-process handles, every edge validated against creation AND exit times
+    across two snapshots -- and is the right answer for a caller that holds an exact
+    root handle; this is the token-only form for callers that do not.
+    """
+    try:
+        return int(child_token) > int(parent_token)
+    except ValueError:
+        return False
+
+
 def _windows_process_parent_map() -> dict[int, int]:
     """Return one Toolhelp PID -> PPID snapshot, raising if enumeration fails."""
 

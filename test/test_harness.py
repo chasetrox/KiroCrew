@@ -4,6 +4,15 @@ Most tests exercise the harness's internal helpers in isolation with a
 stand-in for ``subprocess.Popen``. Spawning a real gateway takes 5–15s
 and pulls in the full MCP probe / config init / dashboard bind path, so
 the end-to-end test is gated behind ``KIROCREW_HARNESS_INTEGRATION``.
+
+This file runs on Windows too. A wholesale collect-ignore of it is what
+hid the READY-wait and orchestration tests -- the majority of it, and all of the
+platform-neutral part -- from the only shards that could have caught the
+selectors-on-a-pipe break. What is genuinely POSIX-only is the ``terminate_pgid``
+family plus the SIGKILL return-code assertions, and those carry
+``_POSIX_ONLY`` per test. Nothing else is skipped: see
+``docs/system-specs/common/testing-conventions.md`` on why a whole-file skip is
+the expensive kind of green.
 """
 
 from __future__ import annotations
@@ -21,6 +30,7 @@ from unittest.mock import patch
 
 import pytest
 
+from kiro_crew import platform_compat
 from kiro_crew.testing.harness import (
     DEFAULT_READY_TIMEOUT,
     READY_PREFIX,
@@ -33,6 +43,16 @@ from kiro_crew.testing.harness import (
     parse_ready_line,
     spawn_feature_gateway,
     terminate_pgid,
+)
+
+# Process groups, ``setsid``, ``killpg`` and negative SIGKILL return codes are
+# POSIX concepts with no Windows equivalent -- ``_terminate_process_group``
+# routes Windows through ``platform_compat.kill_process_tree`` instead, whose
+# ``taskkill /F`` exit is not a negative signal number. Per test, never
+# per file.
+_POSIX_ONLY = pytest.mark.skipif(
+    platform_compat.IS_WINDOWS,
+    reason="POSIX process-group semantics (setsid/killpg, -SIGKILL return codes)",
 )
 
 
@@ -221,12 +241,18 @@ def test_parse_ready_line_rejects_missing_prefix(non_matching_line: str) -> None
 
 
 def test_terminate_handles_already_exited_proc() -> None:
-    """Already-exited proc → no-op, no exception."""
+    """Already-exited proc → no-op, no exception.
+
+    Runs on Windows too: ``_terminate_process_group`` returns on the ``poll()``
+    check before reaching either platform's kill primitive, so this pins the one
+    branch that is genuinely shared.
+    """
     proc = subprocess.Popen(
         [sys.executable, "-c", "pass"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        start_new_session=True,
+        start_new_session=platform_compat.IS_POSIX,
+        creationflags=platform_compat.CREATE_NEW_PROCESS_GROUP,
     )
     # 30s: generous for `python -c pass`, but the package-builder fleet can
     # stall a fresh child process >5s under load (two consecutive Dry Run
@@ -238,6 +264,7 @@ def test_terminate_handles_already_exited_proc() -> None:
     _terminate_process_group(proc)
 
 
+@_POSIX_ONLY
 def test_terminate_falls_back_to_sigkill() -> None:
     """Process that ignores SIGTERM gets SIGKILL after the grace period.
 
@@ -280,9 +307,95 @@ def test_terminate_falls_back_to_sigkill() -> None:
             proc.wait(timeout=2)
 
 
+# ── Windows teardown routing (asserted from every platform) ─────────────
+
+
+def test_terminate_routes_through_process_tree_kill_on_windows() -> None:
+    """On Windows the teardown must use ``kill_process_tree``, not the pgid path.
+
+    Asserted with ``IS_WINDOWS`` patched rather than only on a Windows runner:
+    the POSIX legs are the ones a contributor runs locally, and a reroute that
+    quietly went back to ``terminate_pgid`` would otherwise only surface as an
+    ``AttributeError`` from ``os.getpgid`` inside a Windows CI job.
+    """
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=platform_compat.IS_POSIX,
+        creationflags=platform_compat.CREATE_NEW_PROCESS_GROUP,
+    )
+    killed: list[int] = []
+    try:
+        with (
+            patch("kiro_crew.testing.harness.platform_compat.IS_WINDOWS", True),
+            patch(
+                "kiro_crew.testing.harness.platform_compat.kill_process_tree",
+                side_effect=lambda pid, sig=None: killed.append(pid) or True,
+            ),
+            patch("kiro_crew.testing.harness.terminate_pgid") as pgid,
+            patch("kiro_crew.testing.harness.TERMINATE_GRACE_SECONDS", 0.2),
+        ):
+            _terminate_process_group(proc)
+        assert killed == [proc.pid], "Windows teardown did not kill the process tree"
+        assert not pgid.called, "Windows teardown reached the POSIX pgid primitive"
+    finally:
+        proc.kill()
+        proc.wait(timeout=30)
+
+
+def test_terminate_on_windows_survives_a_failed_tree_kill() -> None:
+    """A ``taskkill`` failure is logged, not raised.
+
+    Teardown runs in a ``finally``: letting a protected descendant or a
+    transient access denial propagate would convert a PASSING test into an error
+    whose traceback names the harness rather than the test.
+    """
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=platform_compat.IS_POSIX,
+        creationflags=platform_compat.CREATE_NEW_PROCESS_GROUP,
+    )
+    try:
+        with (
+            patch("kiro_crew.testing.harness.platform_compat.IS_WINDOWS", True),
+            patch(
+                "kiro_crew.testing.harness.platform_compat.kill_process_tree",
+                side_effect=PermissionError("taskkill rc=5 access denied"),
+            ),
+            patch("kiro_crew.testing.harness.TERMINATE_GRACE_SECONDS", 0.2),
+        ):
+            _terminate_process_group(proc)  # must not raise
+    finally:
+        proc.kill()
+        proc.wait(timeout=30)
+
+
+# ── READY emitted in the same breath as the exit ─────────────────────────
+
+
+def test_ready_line_returned_when_child_exits_immediately_after_printing() -> None:
+    """A child that prints READY and exits at once still yields its payload.
+
+    The child-exit check runs before the read, so a gateway whose exit lands in
+    that window would be reported as "exited before READY" even though the
+    line was already in the pipe. That is a wall-clock race (flake class 2), not
+    a verdict, so the exit path drains what the reader captured first.
+    """
+    fake = FakePopen([f'{READY_PREFIX}{{"port": 7, "token": "t"}}\n'.encode()])
+    fake.returncode = 0  # already exited, as a fast gateway would be
+
+    result = _wait_for_ready_line(fake, timeout=5.0, stderr_buffer=[])  # type: ignore[arg-type]
+
+    assert result["port"] == 7
+
+
 # ── terminate_pgid ──────────────────────────────────────────────────────
 
 
+@_POSIX_ONLY
 def test_terminate_pgid_noop_when_pid_gone() -> None:
     """A pid with no live process is a clean no-op (no exception)."""
     proc = subprocess.Popen(
@@ -299,6 +412,7 @@ def test_terminate_pgid_noop_when_pid_gone() -> None:
     terminate_pgid(proc.pid)
 
 
+@_POSIX_ONLY
 def test_terminate_pgid_sigkills_after_grace() -> None:
     """A process ignoring SIGTERM is SIGKILLed after the grace window.
 
@@ -335,6 +449,7 @@ def test_terminate_pgid_sigkills_after_grace() -> None:
             proc.wait(timeout=2)
 
 
+@_POSIX_ONLY
 def test_terminate_pgid_graceful_exit_returns_fast() -> None:
     """A group that exits promptly on SIGTERM returns well under ``grace``.
 
@@ -368,6 +483,7 @@ def test_terminate_pgid_graceful_exit_returns_fast() -> None:
             proc.wait(timeout=2)
 
 
+@_POSIX_ONLY
 def test_terminate_pgid_grace_default_resolved_at_call_time() -> None:
     """Patching ``TERMINATE_GRACE_SECONDS`` affects the default grace.
 
@@ -404,6 +520,7 @@ def test_terminate_pgid_grace_default_resolved_at_call_time() -> None:
             proc.wait(timeout=2)
 
 
+@_POSIX_ONLY
 def test_terminate_pgid_wait_hook_used_for_exit_detection() -> None:
     """A supplied ``wait`` hook replaces the pid poll for exit detection.
 
@@ -494,8 +611,9 @@ def test_spawn_feature_gateway_happy_path() -> None:
 
     terminated: dict[str, bool] = {"called": False}
 
-    def fake_terminate(_proc: object) -> None:
+    def fake_terminate(_proc: object) -> bool:
         terminated["called"] = True
+        return True  # the child exited, so the HOME may go
 
     captured_cmd: list[list[str]] = []
     captured_env: dict[str, str] = {}
@@ -538,6 +656,32 @@ def test_spawn_feature_gateway_happy_path() -> None:
     # included — a stray cron firing during an unrelated test is the
     # exact flake the default guards against.
     assert "--no-crons" in captured_cmd[0]
+
+
+def test_spawn_feature_gateway_keeps_the_home_when_the_gateway_will_not_die() -> None:
+    """A tree kill that did not end the gateway must not be followed by deleting
+    the HOME it is still writing into. The harness logs the path and leaves it."""
+
+    fake_proc = _make_fake_proc_with_ready(
+        '{"port": 51234, "token": "t-abc", "pid": 9876, "home": "/tmp/x"}'
+    )
+
+    with (
+        patch("kiro_crew.testing.harness.subprocess.Popen", return_value=fake_proc),
+        patch(
+            "kiro_crew.testing.harness._terminate_process_group",
+            return_value=False,
+        ),
+    ):
+        with spawn_feature_gateway(fixture="empty") as handle:
+            captured_home = handle.home
+
+    try:
+        assert captured_home.exists(), "HOME was deleted under a gateway that did not exit"
+    finally:
+        import shutil
+
+        shutil.rmtree(captured_home, ignore_errors=True)
 
 
 def test_spawn_feature_gateway_isolates_the_agent_spec_home() -> None:
@@ -704,3 +848,133 @@ def test_spawn_real_gateway_round_trip() -> None:
     # Outside the with-block: process is gone, home is removed.
     assert proc.poll() is not None
     assert not handle.home.exists()
+
+
+# --------------------------------------------------------------------------- #
+# The Windows backend shim. Its whole job is to survive cmd.exe's own parsing,
+# and every rule below was added because the naive spelling breaks on a real
+# path -- so each one is asserted rather than left to the E2E run, which only
+# ever sees the happy path on a runner whose paths are plain ASCII.
+# --------------------------------------------------------------------------- #
+def test_the_backend_shim_is_the_module_path_itself_off_windows(tmp_path: Path) -> None:
+    """No shim where none is needed: POSIX spawns the module file directly."""
+    from kiro_crew.testing import harness as h
+
+    with patch.object(h.platform_compat, "IS_WINDOWS", False):
+        produced = h.fake_acp_backend_launcher(tmp_path)
+
+    assert produced.name == "fake_acp_backend.py"
+    assert not (tmp_path / "kiro-backend.cmd").exists()
+
+
+def test_the_backend_shim_is_written_in_the_console_code_page() -> None:
+    """The codec choice, pinned on its own because it cannot be exercised elsewhere.
+
+    ``oem`` exists only on Windows, so a test that WRITES the shim can only assert
+    the escaping rules (which are platform-independent) and not this. cmd.exe
+    decodes a batch file in the console's OEM code page: ``ascii`` raises outright
+    on a non-ASCII interpreter path, and ``utf-8`` hands cmd.exe mojibake for one.
+    """
+    from kiro_crew.testing import harness as h
+
+    assert h.SHIM_ENCODING == "oem"
+
+
+def test_the_backend_shim_doubles_percent_so_cmd_cannot_expand_the_path(tmp_path: Path) -> None:
+    """``%`` is legal in a Windows path and is cmd.exe's variable sigil.
+
+    An interpreter under a directory containing ``%`` would otherwise be
+    substituted away and the shim would boot whatever the empty expansion named,
+    or nothing at all. Doubling is what makes cmd.exe emit one literal ``%``.
+
+    The codec is redirected because ``oem`` does not exist off Windows, and the
+    rule under test is the ESCAPING, which is the same on every platform. The real
+    codec is pinned by the test above, so nothing is lost by not using it here.
+    """
+    from kiro_crew.testing import harness as h
+
+    interpreter = r"C:\tools\100%python\python.exe"
+    with patch.object(h, "SHIM_ENCODING", "utf-8"):
+        with patch.object(h.platform_compat, "IS_WINDOWS", True):
+            with patch.object(h.sys, "executable", interpreter):
+                produced = h.fake_acp_backend_launcher(tmp_path)
+
+    assert produced.name == "kiro-backend.cmd"
+    raw = produced.read_bytes()
+    assert rb"100%%python" in raw, "each % must be doubled for cmd.exe"
+    assert b"100%python" not in raw.replace(rb"100%%python", b""), "no bare % may survive"
+    # Asserted on the BYTES: a text read applies universal newlines, so it cannot
+    # see what cmd.exe actually reads, and CRLF is what cmd.exe needs to not
+    # mis-parse the last line.
+    assert raw.endswith(b"\r\n")
+
+
+def test_the_backend_shim_refuses_a_path_cmd_cannot_quote(tmp_path: Path) -> None:
+    """Refuse, rather than write a shim that boots a DIFFERENT path.
+
+    A double quote or a newline in the interpreter path cannot be escaped inside
+    a batch file, so the alternatives are a loud harness error or a silent boot of
+    the wrong executable. The message has to name the path, because the operator
+    cannot see the generated file.
+    """
+    from kiro_crew.testing import harness as h
+
+    for hostile in ('C:\\to"ols\\python.exe', "C:\\tools\\py\nthon.exe"):
+        with patch.object(h.platform_compat, "IS_WINDOWS", True):
+            with patch.object(h.sys, "executable", hostile):
+                with pytest.raises(GatewaySpawnError) as excinfo:
+                    h.fake_acp_backend_launcher(tmp_path)
+
+        assert "cannot quote" in str(excinfo.value)
+        assert not (
+            tmp_path / "kiro-backend.cmd"
+        ).exists(), "a refused shim must leave no file behind for a later run to pick up"
+
+
+class TestTeardownDoesNotTrustTheRootsExit:
+    """An exited root is not a tree that is gone, and teardown must not say it is.
+
+    The caller spends this verdict on whether it may ``rmtree`` the gateway's HOME.
+    A gateway that crashes mid-test while a child it spawned keeps running would,
+    with a ``proc.poll()`` short-circuit, be reported as fully torn down and the
+    directory removed under a live writer.
+    """
+
+    class _ExitedProc:
+        pid = 4242
+        returncode = 1
+
+        def poll(self):
+            return 1
+
+        def wait(self, timeout=None):
+            return 1
+
+    def test_the_windows_sweep_still_runs_for_an_exited_root(self, monkeypatch) -> None:
+        from kiro_crew.testing import harness as h
+
+        swept: list[int] = []
+        monkeypatch.setattr(h.platform_compat, "IS_WINDOWS", True)
+        monkeypatch.setattr(
+            h, "_terminate_process_tree_windows", lambda p: swept.append(p.pid) or False
+        )
+
+        verdict = h._terminate_process_group(self._ExitedProc())
+
+        assert swept == [4242], "the descendant sweep must not be skipped for a dead root"
+        assert verdict is False, "the sweep's answer is the verdict, not the root's exit"
+
+    def test_the_posix_group_kill_still_runs_for_an_exited_root(self, monkeypatch) -> None:
+        """A process group outlives its leader, so killpg is still the right handle."""
+        from kiro_crew.testing import harness as h
+
+        killed: list[int] = []
+        monkeypatch.setattr(h.platform_compat, "IS_WINDOWS", False)
+        monkeypatch.setattr(
+            h, "terminate_pgid", lambda pid, grace=None, wait=None: killed.append(pid)
+        )
+
+        verdict = h._terminate_process_group(self._ExitedProc())
+
+        assert killed == [4242], "orphaned children stay in the group and must be signalled"
+        assert verdict is True
