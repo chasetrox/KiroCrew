@@ -5236,7 +5236,6 @@
       "voice_provider_not_installed": "Voice provider not installed"
     },
     "voiceStatusBar": {
-      "dismiss_microphone_error": "Dismiss microphone error",
       "recording": "Recording"
     },
     "webAppArtifactCard": {

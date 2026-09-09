@@ -5756,6 +5756,10 @@
       "that_approval_expired_the_turn_it_belonged_to_is": "Diese Genehmigungsanfrage ist abgelaufen, weil der zugehörige Zug nicht mehr auf Genehmigung wartet.",
       "that_request_already_timed_out_and_was_denied": "Diese Anfrage von {{source}} ist bereits abgelaufen und wurde abgelehnt — der Job wartet nicht mehr. Den Eintrag findest du im Genehmigungs-Feed.",
       "total": "Gesamt",
+      "dictation_added": "Diktat zur Nachricht hinzugefügt",
+      "mic_in_use_elsewhere": "Mikrofon wird in einem anderen Chat verwendet",
+      "mic_in_use_in": "Mikrofon wird in „{{chat}}“ verwendet",
+      "type_label": "Stattdessen tippen",
       "transcribing": "Wird transkribiert…",
       "transcribing_please_wait": "Wird transkribiert, bitte warten…",
       "trust_reads": "Nur-Lese-Befehlen vertrauen",
@@ -7728,7 +7732,6 @@
     },
     "voiceStatusBar": {
       "default_microphone": "Standardmikrofon",
-      "dismiss_microphone_error": "Mikrofonfehler schließen",
       "recording": "Aufnahme"
     },
     "webAppArtifactCard": {

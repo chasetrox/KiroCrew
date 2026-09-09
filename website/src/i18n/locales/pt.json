@@ -5849,6 +5849,10 @@
       "that_approval_expired_the_turn_it_belonged_to_is": "Esta solicitação de aprovação expirou porque o turno associado não está mais aguardando aprovação.",
       "that_request_already_timed_out_and_was_denied": "Essa solicitação de {{source}} já expirou e foi negada — o job não está mais aguardando. Consulte o feed de aprovações para ver o registro.",
       "total": "Total",
+      "dictation_added": "Ditado adicionado à sua mensagem",
+      "mic_in_use_elsewhere": "Microfone em uso em outra conversa",
+      "mic_in_use_in": "Microfone em uso em “{{chat}}”",
+      "type_label": "Digitar em vez disso",
       "transcribing": "Transcrevendo…",
       "transcribing_please_wait": "Transcrevendo, aguarde…",
       "trust_reads": "Confiar em comandos somente leitura",
@@ -7839,7 +7843,6 @@
     },
     "voiceStatusBar": {
       "default_microphone": "Microfone padrão",
-      "dismiss_microphone_error": "Descartar erro do microfone",
       "recording": "Gravando"
     },
     "webAppArtifactCard": {

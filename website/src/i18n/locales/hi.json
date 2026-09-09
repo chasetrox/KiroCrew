@@ -5756,6 +5756,10 @@
       "that_approval_expired_the_turn_it_belonged_to_is": "यह मंज़ूरी अनुरोध समाप्त हो गया क्योंकि संबद्ध टर्न अब मंज़ूरी की प्रतीक्षा में नहीं है।",
       "that_request_already_timed_out_and_was_denied": "वह {{source}} अनुरोध पहले ही टाइम आउट होकर अस्वीकार हो गया — जॉब अब प्रतीक्षा नहीं कर रही। रिकॉर्ड के लिए मंज़ूरी फ़ीड देखो।",
       "total": "Total",
+      "dictation_added": "डिक्टेशन संदेश में जोड़ दिया गया",
+      "mic_in_use_elsewhere": "माइक्रोफ़ोन दूसरी चैट में उपयोग में है",
+      "mic_in_use_in": "माइक्रोफ़ोन “{{chat}}” में उपयोग में है",
+      "type_label": "इसके बजाय टाइप करें",
       "transcribing": "ट्रांसक्राइब हो रहा है…",
       "transcribing_please_wait": "ट्रांसक्राइब हो रहा है, कृपया प्रतीक्षा करें…",
       "trust_reads": "केवल-पढ़ने वाले कमांड पर भरोसा करें",
@@ -7728,7 +7732,6 @@
     },
     "voiceStatusBar": {
       "default_microphone": "डिफ़ॉल्ट माइक्रोफ़ोन",
-      "dismiss_microphone_error": "माइक्रोफ़ोन त्रुटि खारिज करें",
       "recording": "रिकॉर्डिंग"
     },
     "webAppArtifactCard": {

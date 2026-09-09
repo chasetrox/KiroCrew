@@ -5849,6 +5849,10 @@
       "that_approval_expired_the_turn_it_belonged_to_is": "Cette demande d’approbation a expiré car le tour associé n’attend plus d’approbation.",
       "that_request_already_timed_out_and_was_denied": "Cette demande {{source}} a déjà expiré et a été refusée — la tâche n’attend plus. Consulte le flux des approbations pour la trace.",
       "total": "Total",
+      "dictation_added": "Dictée ajoutée à votre message",
+      "mic_in_use_elsewhere": "Micro utilisé dans une autre conversation",
+      "mic_in_use_in": "Micro utilisé dans « {{chat}} »",
+      "type_label": "Écrire à la place",
       "transcribing": "Transcription…",
       "transcribing_please_wait": "Transcription en cours, patiente…",
       "trust_reads": "Approuver les commandes en lecture seule",
@@ -7839,7 +7843,6 @@
     },
     "voiceStatusBar": {
       "default_microphone": "Micro par défaut",
-      "dismiss_microphone_error": "Ignorer l'erreur du microphone",
       "recording": "Enregistrement"
     },
     "webAppArtifactCard": {

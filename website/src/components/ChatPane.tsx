@@ -53,6 +53,7 @@ import { api } from '../api/client'
 import { resolveAskAfterSend } from '../lib/resolveAskAfterSend'
 import { classifyDrop } from '../utils/dropClassify'
 import { prepareSendPayload, serializeDirTokens, spliceDirTokens, VIDEO_EXT } from '../utils/fileTokens'
+import { Composer, type ComposerHandle, type ComposerVoiceOptions } from '../chat-core/composer/Composer'
 import { displayModel } from '../lib/model'
 
 
@@ -277,6 +278,19 @@ export default function ChatPane({
   // has_more freezes at mount while a later bounded warm can truncate the cache.
   const warmHasMore = useAppSelector((s) => s.chat.slotPaneHasMore?.[slotKey])
   const paneSlot = useAppSelector((s) => s.dashboard.slots.find((x) => x.key === slotKey))
+  // The composer is a `Composer` root around the ChatInput preset (chat-core
+  // P3-b). Its Voice atom is what gives the pane a microphone: the pane wires no
+  // voice props, only the two things the atom cannot know — the endpointer's
+  // auto-submit, and (through the root) that a pane's composer IS its slot's, so
+  // the atom's default on-screen predicate is exact. No push-to-talk here: that
+  // key binding is document-wide and ChatPage owns it (follow-up: focused-pane
+  // ownership). The pane's steer-not-queue rule (#8852) stays on `canSteer`
+  // below until the Send atom exists.
+  const composerRef = useRef<ComposerHandle>(null)
+  const doSendRef = useRef<((optionText?: string) => void) | null>(null)
+  const composerVoiceOptions = useMemo<ComposerVoiceOptions>(() => ({
+    onAutoSubmit: () => { doSendRef.current?.() },
+  }), [])
   // Shared composer-busy rule (chatSlice.selectComposerBusy): main turn
   // streaming OR sub-agents running (dual signal). Drives the queue affordance
   // and skips the optimistic user bubble (the backend returns a "queued"
@@ -670,6 +684,9 @@ export default function ChatPane({
     // start a real turn instead of queueing. Same `/api/chat` flag as a steer.
     const text = (optionText || input).trim()
     if (!text && !pendingFiles.length) return
+    // A send while STREAMING dictation is live ends the dictation, before the
+    // composer is read and cleared (see useComposerVoice.disarmForSend).
+    composerRef.current?.voice()?.disarmForSend()
     // Capture the stateless card pending at ENTRY (before any state updates
     // or yields): this send consumes the answer channel of the card the user
     // saw when they hit send. Retired only after the server confirms it
@@ -827,6 +844,9 @@ export default function ChatPane({
       void resolveAskAfterSend(receipt.body, askAtSend, dispatch)
     })
   }, [input, pendingFiles, busy, slotKey, dispatch, restoreIntoComposer, reportSendFailure])
+  // The endpointer auto-submit (handed to the Voice atom above) reads the
+  // latest send through this ref.
+  doSendRef.current = doSend
 
   // Mid-turn steer: inject the composer content into the RUNNING turn instead
   // of queueing behind it. The pane's counterpart to ChatPage.steer, on the
@@ -855,6 +875,12 @@ export default function ChatPane({
     // A steer cannot restore what it cleared on an empty payload, so refuse a
     // payload of nothing (mirrors ChatPage.steer's `!raw && !files.length`).
     if (!raw && !files.length) return
+    // A steer while STREAMING dictation is live ends the dictation, like
+    // doSend: this path clears the composer below, and a partial landing after
+    // the clear would rebuild the sent text (see useComposerVoice.disarmForSend).
+    // AFTER the empty-payload check, like doSend: an Enter on an empty composer
+    // before the first partial lands sends nothing and must not end the capture.
+    composerRef.current?.voice()?.disarmForSend()
     const { txt, filePaths } = prepareSendPayload(raw, files)
     const sendId = `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     // `meta.files` is the ORDERED non-image list the `[attached_file N]`
@@ -1344,6 +1370,13 @@ export default function ChatPane({
             shape as ChatPage's inputAreaRef). */}
         {quoteFlight && <FlyingQuote text={quoteFlight.text} from={quoteFlight.from} targetRef={inputAreaRef} onComplete={endQuoteFlight} />}
         <div ref={inputAreaRef} className="relative z-10">
+        <Composer
+          ref={composerRef}
+          slotKey={slotKey}
+          value={input}
+          onChange={setInput}
+          voice={composerVoiceOptions}
+        >
         <ChatInput
           value={input}
           onChange={setInput}
@@ -1443,6 +1476,7 @@ export default function ChatPane({
           onDragOver={dropTargetProps.onDragOver}
           onDragLeave={dropTargetProps.onDragLeave}
         />
+        </Composer>
         </div>
         </div>
 

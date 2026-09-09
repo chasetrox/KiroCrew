@@ -5942,6 +5942,10 @@
       "that_approval_expired_the_turn_it_belonged_to_is": "Срок действия этого запроса на одобрение истёк, потому что связанный с ним ход больше не ожидает одобрения.",
       "that_request_already_timed_out_and_was_denied": "Запрос {{source}} уже истёк по таймауту и был отклонён — задание больше не ждёт. Запись смотри в ленте подтверждений.",
       "total": "Всего",
+      "dictation_added": "Надиктованный текст добавлен в сообщение",
+      "mic_in_use_elsewhere": "Микрофон используется в другом чате",
+      "mic_in_use_in": "Микрофон используется в чате «{{chat}}»",
+      "type_label": "Ввести текст",
       "transcribing": "Расшифровка…",
       "transcribing_please_wait": "Расшифровка, подожди…",
       "trust_reads": "Доверять командам только для чтения",
@@ -7950,7 +7954,6 @@
     },
     "voiceStatusBar": {
       "default_microphone": "Микрофон по умолчанию",
-      "dismiss_microphone_error": "Скрыть ошибку микрофона",
       "recording": "Запись"
     },
     "webAppArtifactCard": {
