@@ -6500,6 +6500,8 @@
       "diff_failed_to_compute": "差分を計算できませんでした（このファイルで git が失敗しました）",
       "diff_no_baseline_not_git": "このファイルは git リポジトリ内にないため、比較する基準となるバージョンがありません",
       "discard_changes_button": "変更を破棄",
+      "discard_comment_button": "コメントを破棄",
+      "discard_unsaved_comment": "保存されていないコメントを破棄しますか？",
       "discard_unsaved_changes": "保存されていない変更を破棄しますか？",
       "download": "ダウンロード",
       "download_failed": "ダウンロードに失敗しました",
@@ -7139,7 +7141,13 @@
     "selectionToolbar": {
       "ask": "これについて質問",
       "ask_hint": "選択部分を引用してサイドチャットを開きます — 送信するまで何も送られず、メインのチャットには影響しません",
+      "comment_input": "選択したテキストにコメント",
       "copy": "コピー",
+      "copy_failed": "コピーに失敗しました — ブラウザーがクリップボードへのアクセスをブロックしました。テキストを選択して手動でコピーしてください。",
+      "copy_selection_hint": "選択したテキスト（コメントではなく）をクリップボードにコピーします",
+      "more_actions": "選択範囲に対するその他の操作",
+      "press_enter_to_comment": "Enter またはクリックでコメント…",
+      "tap_to_comment": "タップしてコメントを入力…",
       "quote": "引用",
       "quote_hint": "選択部分をこの会話の入力欄に引用します — 返信はメインのチャットに送られます"
     },

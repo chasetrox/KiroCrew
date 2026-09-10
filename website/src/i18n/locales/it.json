@@ -6704,6 +6704,8 @@
       "diff_failed_to_compute": "Impossibile calcolare il diff — git non è riuscito su questo file",
       "diff_no_baseline_not_git": "Questo file non si trova in un repository git, quindi non c'è una versione di base con cui confrontarlo",
       "discard_changes_button": "Scarta le modifiche",
+      "discard_comment_button": "Scarta il commento",
+      "discard_unsaved_comment": "Scartare il commento non salvato?",
       "discard_unsaved_changes": "Scartare le modifiche non salvate?",
       "download": "Scarica",
       "download_failed": "Download non riuscito",
@@ -7359,7 +7361,13 @@
     "selectionToolbar": {
       "ask": "Chiedi di questo",
       "ask_hint": "Apre la Chat laterale con la selezione citata: non viene inviato nulla finché non invii tu, e la chat principale resta intatta",
+      "comment_input": "Commenta il testo selezionato",
       "copy": "Copia",
+      "copy_failed": "Copia non riuscita: il browser ha bloccato l’accesso agli appunti. Seleziona il testo e copialo manualmente.",
+      "copy_selection_hint": "Copia il testo selezionato (non il tuo commento) negli appunti",
+      "more_actions": "Altre azioni per la selezione",
+      "press_enter_to_comment": "Premi Invio o clicca per commentare…",
+      "tap_to_comment": "Tocca per scrivere un commento…",
       "quote": "Cita",
       "quote_hint": "Cita la selezione nel compositore di questa conversazione: la tua risposta va nella chat principale"
     },

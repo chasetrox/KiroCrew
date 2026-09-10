@@ -6500,6 +6500,8 @@
       "diff_failed_to_compute": "无法生成差异：git 在此文件上执行失败",
       "diff_no_baseline_not_git": "此文件不在任何 git 仓库中，没有可对比的基准版本",
       "discard_changes_button": "放弃更改",
+      "discard_comment_button": "放弃评论",
+      "discard_unsaved_comment": "放弃未保存的评论？",
       "discard_unsaved_changes": "放弃未保存的更改？",
       "download": "下载",
       "download_failed": "下载失败",
@@ -7139,7 +7141,13 @@
     "selectionToolbar": {
       "ask": "随手问",
       "ask_hint": "打开随手问并引用选中内容——在你点击发送前不会发出任何内容，主聊天不受影响",
+      "comment_input": "对选中文字添加评论",
       "copy": "复制",
+      "copy_failed": "复制失败——浏览器阻止了访问剪贴板。请选中文字后手动复制。",
+      "copy_selection_hint": "复制选中的文字（而不是你的评论）到剪贴板",
+      "more_actions": "针对选中内容的更多操作",
+      "press_enter_to_comment": "按 Enter 或点击以评论…",
+      "tap_to_comment": "点按开始写评论…",
       "quote": "引用",
       "quote_hint": "把选中内容引用到本对话的输入框——你的回复会发到主聊天"
     },

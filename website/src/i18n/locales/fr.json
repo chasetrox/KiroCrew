@@ -6704,6 +6704,8 @@
       "diff_failed_to_compute": "Impossible de calculer le diff — git a échoué sur ce fichier",
       "diff_no_baseline_not_git": "Ce fichier n'est pas dans un dépôt git, il n'y a donc aucune version de référence à comparer",
       "discard_changes_button": "Abandonner les modifications",
+      "discard_comment_button": "Abandonner le commentaire",
+      "discard_unsaved_comment": "Abandonner le commentaire non enregistré ?",
       "discard_unsaved_changes": "Abandonner les modifications non enregistrées ?",
       "download": "Télécharger",
       "download_failed": "Échec du téléchargement",
@@ -7359,7 +7361,13 @@
     "selectionToolbar": {
       "ask": "Demander à ce sujet",
       "ask_hint": "Ouvre le Chat annexe avec la sélection citée — rien n’est envoyé avant que tu n’envoies, et la discussion principale reste intacte",
+      "comment_input": "Commenter le texte sélectionné",
       "copy": "Copier",
+      "copy_failed": "Échec de la copie : le navigateur a bloqué l’accès au presse-papiers. Sélectionnez le texte et copiez-le vous-même.",
+      "copy_selection_hint": "Copie le texte sélectionné (pas votre commentaire) dans le presse-papiers",
+      "more_actions": "Plus d'actions pour la sélection",
+      "press_enter_to_comment": "Entrée ou clic pour commenter…",
+      "tap_to_comment": "Touchez pour écrire un commentaire…",
       "quote": "Citer",
       "quote_hint": "Cite la sélection dans le composeur de cette discussion — ta réponse part dans la discussion principale"
     },

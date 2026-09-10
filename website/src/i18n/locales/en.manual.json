@@ -2144,6 +2144,8 @@
       "diff_failed_to_compute": "Couldn't compute the diff — git failed for this file",
       "diff_no_baseline_not_git": "This file isn't in a git repository, so there is no baseline to diff against",
       "discard_changes_button": "Discard changes",
+      "discard_comment_button": "Discard comment",
+      "discard_unsaved_comment": "Discard your unsaved comment?",
       "download_failed": "Download failed",
       "edit": "Edit",
       "failed_to_add_source": "Failed to add source",
@@ -2418,6 +2420,14 @@
     "secretField": {
       "hide": "Hide",
       "show": "Show"
+    },
+    "selectionToolbar": {
+      "comment_input": "Comment on the selected text",
+      "copy_failed": "Copy failed — your browser blocked clipboard access. Select the text and copy it yourself.",
+      "copy_selection_hint": "Copies the selected text — not your comment — to the clipboard",
+      "more_actions": "More actions for the selection",
+      "press_enter_to_comment": "Press Enter or click to comment…",
+      "tap_to_comment": "Tap to write a comment…"
     },
     "sessionActionsMenu": {
       "mark_as_read": "Mark as read",

@@ -6704,6 +6704,8 @@
       "diff_failed_to_compute": "No se pudo calcular el diff: git falló con este archivo",
       "diff_no_baseline_not_git": "Este archivo no está en un repositorio git, así que no hay una versión base con la que comparar",
       "discard_changes_button": "Descartar cambios",
+      "discard_comment_button": "Descartar comentario",
+      "discard_unsaved_comment": "¿Descartar el comentario sin guardar?",
       "discard_unsaved_changes": "¿Descartar los cambios sin guardar?",
       "download": "Descargar",
       "download_failed": "La descarga ha fallado",
@@ -7359,7 +7361,13 @@
     "selectionToolbar": {
       "ask": "Preguntar sobre esto",
       "ask_hint": "Abre el Chat lateral con la selección citada: no se envía nada hasta que lo envíes, y el chat principal no se toca",
+      "comment_input": "Comentar el texto seleccionado",
       "copy": "Copiar",
+      "copy_failed": "Error al copiar: el navegador bloqueó el acceso al portapapeles. Selecciona el texto y cópialo manualmente.",
+      "copy_selection_hint": "Copia el texto seleccionado (no tu comentario) al portapapeles",
+      "more_actions": "Más acciones para la selección",
+      "press_enter_to_comment": "Pulsa Intro o haz clic para comentar…",
+      "tap_to_comment": "Toca para escribir un comentario…",
       "quote": "Citar",
       "quote_hint": "Cita la selección en el redactor de esta conversación: tu respuesta va al chat principal"
     },

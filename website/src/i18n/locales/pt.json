@@ -6704,6 +6704,8 @@
       "diff_failed_to_compute": "Não foi possível calcular o diff — o git falhou neste arquivo",
       "diff_no_baseline_not_git": "Este arquivo não está em um repositório git, então não há uma versão base para comparar",
       "discard_changes_button": "Descartar alterações",
+      "discard_comment_button": "Descartar comentário",
+      "discard_unsaved_comment": "Descartar o comentário não salvo?",
       "discard_unsaved_changes": "Descartar alterações não salvas?",
       "download": "Baixar",
       "download_failed": "Falha ao baixar",
@@ -7359,7 +7361,13 @@
     "selectionToolbar": {
       "ask": "Perguntar sobre isto",
       "ask_hint": "Abre o Chat lateral com a seleção citada: nada é enviado até você enviar, e o chat principal fica intacto",
+      "comment_input": "Comentar o texto selecionado",
       "copy": "Copiar",
+      "copy_failed": "Falha ao copiar — o navegador bloqueou o acesso à área de transferência. Selecione o texto e copie manualmente.",
+      "copy_selection_hint": "Copia o texto selecionado (não o seu comentário) para a área de transferência",
+      "more_actions": "Mais ações para a seleção",
+      "press_enter_to_comment": "Pressione Enter ou clique para comentar…",
+      "tap_to_comment": "Toque para escrever um comentário…",
       "quote": "Citar",
       "quote_hint": "Cita a seleção no compositor desta conversa: sua resposta vai para o chat principal"
     },
