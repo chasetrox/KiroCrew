@@ -3798,3 +3798,26 @@ class TestPreviewUrlProjectResolution:
         proj, rel = server._proj_for_preview("http://127.0.0.1:9922/p2/index.html")
         assert proj is not None and proj["id"] == "p2"
         assert rel == "index.html"
+
+
+def test_project_secret_names_cover_every_canonical_ssh_key_basename():
+    """The served-file guard reads the canonical key tuple.
+
+    Hand-rolled it listed four names and omitted `id_ecdsa_sk` / `id_ed25519_sk`,
+    so the preview server would serve a hardware-backed private key sitting in a
+    previewed project tree.
+    """
+    from kiro_crew.apps.builtins.design_tweak.backend.preview_files import PROJECT_SECRET_NAMES
+    from kiro_crew.security import SSH_PRIVATE_KEY_BASENAMES
+
+    for name in SSH_PRIVATE_KEY_BASENAMES:
+        assert name in PROJECT_SECRET_NAMES, f"{name} would be served from a project tree"
+
+
+def test_project_secret_names_keeps_its_non_key_entries():
+    """Deriving the key half must not drop the credential names beside it."""
+    from kiro_crew.apps.builtins.design_tweak.backend.preview_files import PROJECT_SECRET_NAMES
+
+    for name in (".npmrc", ".netrc", ".pypirc", ".git-credentials",
+                 ".htpasswd", ".app_secret", "credentials", "secring.gpg"):
+        assert name in PROJECT_SECRET_NAMES

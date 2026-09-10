@@ -2092,11 +2092,21 @@ def run_command_sandboxed(
     # .netrc, .git-credentials, .npmrc, .pypirc, .kirocrew/.env) and scrubs the
     # agent-denied env keys, while deliberately leaving ~/.ssh reachable so a
     # legitimate command cron can still do git/scp/rsync over SSH. "strict" would
-    # additionally hide ~/.ssh but break those workflows; the residual .ssh
-    # exposure is covered by the storage-time deny-list (mcp_cron._vet_shell_command,
-    # which blocks any .ssh reference) — the primary control. This sandbox is
-    # defense-in-depth and is bypassed when the OS backend falls back to "none"
-    # (e.g. macOS >= 26 — see _clean_cron_env).
+    # additionally hide ~/.ssh but break those workflows, and SSH_AUTH_SOCK is
+    # scrubbed from the child env, so there is no agent alternative: a git or scp
+    # cron has to read the key file itself.
+    #
+    # So ~/.ssh stays READABLE here, and that is an ACCEPTED RESIDUAL, not a
+    # covered case. The storage-time vet (mcp_cron._vet_shell_command) refuses
+    # only what it can spell: a literal `.ssh` path (_CRON_CRED_PATH_RE, plus the
+    # quote/escape/variable/glob variants) and an SSH private-key BASENAME
+    # (_CRON_SSH_KEY_BASENAME_RE, e.g. `find ~ -name id_rsa -exec cat`). A
+    # recursive reader that names neither (`grep -r 'PRIVATE KEY' ~`, `tar czf -
+    # ~`) still reaches the key. The stdout redaction below covers a direct dump
+    # of one. Real closure is a per-job opt-in that hides ~/.ssh by default and
+    # exposes it only for a job that declares it needs SSH — future work. This
+    # sandbox is defense-in-depth and is bypassed when the OS backend falls back
+    # to "none" (e.g. macOS >= 26 — see _clean_cron_env).
     #
     # wrap_argv is INSIDE the try: on a host with no OS sandbox backend (every
     # Windows host) it fail-closes by raising, and outside the try that escaped

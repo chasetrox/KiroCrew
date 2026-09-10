@@ -633,3 +633,32 @@ class TestUploadDelete:
         res = source.delete_source("kc-1", "dev", "us-east-1")
         assert res["removed"] is False
         assert "AccessDenied" in res["error"]
+
+
+def test_excluded_names_cover_every_canonical_ssh_key_basename():
+    """The exclusion set reads the canonical key tuple, so no key type is shippable.
+
+    Hand-rolled, this set listed four names and omitted `id_ecdsa_sk` /
+    `id_ed25519_sk`, so a source shipment would tar a hardware-backed private key
+    it was written to exclude.
+    """
+    from kiro_crew.cloud.source import _EXCLUDE_NAMES
+    from kiro_crew.security import SSH_PRIVATE_KEY_BASENAMES
+
+    for name in SSH_PRIVATE_KEY_BASENAMES:
+        assert name in _EXCLUDE_NAMES, f"{name} would be shipped in a source tarball"
+
+
+def test_excluded_names_keeps_its_non_key_entries():
+    """Deriving the key half must not drop the credential names beside it."""
+    from kiro_crew.cloud.source import _EXCLUDE_NAMES
+
+    for name in (
+        "credentials",
+        "credentials.json",
+        "credentials.csv",
+        ".netrc",
+        ".npmrc",
+        ".pypirc",
+    ):
+        assert name in _EXCLUDE_NAMES

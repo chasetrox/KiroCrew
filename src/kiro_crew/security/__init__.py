@@ -295,6 +295,7 @@ from .paths import (
     DENIED_ROOT_PARTS,
     MAX_SCANNABLE_COMMAND_CHARS,
     MAX_SCANNABLE_SOURCE_BODY_CHARS,
+    SSH_PRIVATE_KEY_BASENAMES,
     PathResolutionStalled,
     _candidate_forms,
     _expanded_env_root,

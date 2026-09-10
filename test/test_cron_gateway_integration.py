@@ -894,6 +894,94 @@ class TestFireTimeAuditTrail:
         )
 
 
+class TestFireTimeCredentialReVet:
+    """A command job authored BEFORE the key-name check shipped is re-judged
+    against it at fire time, instead of firing under the rules of its own
+    authoring day forever."""
+
+    def test_legacy_key_naming_command_is_refused_at_fire_time(self):
+        from kiro_crew.mcp_cron import vet_job_at_fire_time
+
+        # The reported shape: a byte-dump encoding, which the result-path
+        # stdout redaction cannot shape-match, over a key named by basename
+        # outside ~/.ssh. Persisted before the storage-time check existed.
+        job = _make_command_job(command=r"find ~ -name id_rsa -exec od -An -tx1 {} \;")
+        with (
+            patch("kiro_crew.mcp_cron._vet_cron_capability_governance", return_value=None),
+            patch("kiro_crew.mcp_cron._vet_command_governance", return_value=None),
+            patch("kiro_crew.mcp_cron.sel"),
+        ):
+            reason = vet_job_at_fire_time(job)
+        assert reason is not None
+        assert "SSH private key" in reason
+
+    def test_credential_directory_command_is_refused_at_fire_time(self):
+        from kiro_crew.mcp_cron import vet_job_at_fire_time
+
+        job = _make_command_job(command="cat ~/.aws/credentials")
+        with (
+            patch("kiro_crew.mcp_cron._vet_cron_capability_governance", return_value=None),
+            patch("kiro_crew.mcp_cron._vet_command_governance", return_value=None),
+            patch("kiro_crew.mcp_cron.sel"),
+        ):
+            reason = vet_job_at_fire_time(job)
+        assert reason is not None
+        assert "credential path" in reason
+
+    def test_fire_time_credential_deny_emits_scoped_decision(self):
+        from kiro_crew.mcp_cron import vet_job_at_fire_time
+
+        job = _make_command_job(command="cp /opt/deploy/id_ed25519 /tmp/k")
+        with (
+            patch("kiro_crew.mcp_cron._vet_cron_capability_governance", return_value=None),
+            patch("kiro_crew.mcp_cron._vet_command_governance", return_value=None),
+            patch("kiro_crew.mcp_cron.sel") as mock_sel,
+        ):
+            assert vet_job_at_fire_time(job) is not None
+        calls = mock_sel.return_value.log_governance_decision.call_args_list
+        assert any(
+            c.kwargs.get("outcome") == "denied"
+            and c.kwargs.get("scope") == "cron_command_credentials"
+            for c in calls
+        )
+
+    def test_fire_time_re_vet_is_the_credential_check_only_not_the_whole_shell_vet(self):
+        """The bound on this fix: fire time gains the credential-name refusal and
+        NOTHING else from `_vet_shell_command`.
+
+        The syntax restrictions there (command substitution, loops, unresolved
+        variables) are authoring-surface rules. A long-standing job whose command
+        carries a `$(date +%F)` is refused at `cron_add` today but must keep
+        firing -- re-running those rules at fire time would be a silent migration
+        of every existing job, which is a much larger change than the security
+        finding asks for. This pins the narrowness: the same command that
+        `_vet_shell_command` refuses is allowed through the fire-time gate.
+        """
+        from kiro_crew.mcp_cron import _vet_shell_command, vet_job_at_fire_time
+
+        legacy = "echo run-$(date +%F) >> ~/log.txt"
+        # Storage time refuses it (command substitution).
+        assert _vet_shell_command(legacy) is not None
+        job = _make_command_job(command=legacy)
+        with (
+            patch("kiro_crew.mcp_cron._vet_cron_capability_governance", return_value=None),
+            patch("kiro_crew.mcp_cron._vet_command_governance", return_value=None),
+            patch("kiro_crew.mcp_cron.sel"),
+        ):
+            assert vet_job_at_fire_time(job) is None
+
+    def test_benign_command_job_still_fires(self):
+        from kiro_crew.mcp_cron import vet_job_at_fire_time
+
+        job = _make_command_job(command="echo hello")
+        with (
+            patch("kiro_crew.mcp_cron._vet_cron_capability_governance", return_value=None),
+            patch("kiro_crew.mcp_cron._vet_command_governance", return_value=None),
+            patch("kiro_crew.mcp_cron.sel"),
+        ):
+            assert vet_job_at_fire_time(job) is None
+
+
 class TestTimeoutPersistence:
     """Test that timeout field survives save/load cycle."""
 

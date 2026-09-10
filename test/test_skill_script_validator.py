@@ -583,3 +583,30 @@ def test_ordinary_dunder_dict_access_still_passes():
     ):
         ok, findings = validate_skill_script("run.py", src)
         assert ok is True, (src, findings)
+
+
+def test_ssh_key_basenames_beyond_id_rsa_are_flagged():
+    """The rule reads the canonical basename set, so every key type this repo
+    names as a private key is detected -- not only `id_rsa`.
+
+    Before this, the rule was a hand-rolled `id_rsa` word match, so a script
+    naming `id_ed25519` outside ~/.ssh passed the credential-access check.
+    """
+    from kiro_crew.security import SSH_PRIVATE_KEY_BASENAMES
+
+    for name in SSH_PRIVATE_KEY_BASENAMES:
+        ok, findings = validate_skill_script("run.py", f"print('/opt/keys/{name}')\n")
+        assert any(
+            "credential access" in f for f in findings
+        ), f"{name} not detected as a credential access"
+
+
+def test_public_half_is_still_flagged_on_the_skills_surface():
+    """Deriving from the shared set must not SUBTRACT from this gate.
+
+    The cron surface exempts the public half (`id_rsa.pub`) because a cron
+    legitimately reads one. This gate never did, and a generated skill script has
+    no business naming either half, so the `.pub` spelling stays refused here.
+    """
+    ok, findings = validate_skill_script("run.py", "print('/opt/keys/id_rsa.pub')\n")
+    assert any("credential access" in f for f in findings)

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Optional
 
 from kiro_crew.cloud import aws
+from kiro_crew.security import SSH_PRIVATE_KEY_BASENAMES
 from kiro_crew.sel import sel
 from kiro_crew.subprocess_utf8 import UTF8_TEXT
 
@@ -68,12 +69,15 @@ _EXCLUDE_ENV_PREFIX = ".env."
 # Well-known credential filenames that carry no telltale suffix. The tarfile
 # fallback doesn't consult .gitignore (unlike git archive), so a stray
 # credentials.json or SSH key at the repo root must be caught by name.
-_EXCLUDE_NAMES = frozenset(
+#
+# The SSH key names are DERIVED from `security.SSH_PRIVATE_KEY_BASENAMES`, the
+# same canonical tuple the cron and skill-script gates read, rather than spelled
+# again here. Hand-rolled, this set listed four names and omitted the hardware-
+# backed `id_ecdsa_sk` / `id_ed25519_sk` forms, so a source shipment would tar an
+# `_sk` private key it was written to exclude. A key type added to that tuple is
+# excluded here without a second edit.
+_EXCLUDE_NAMES = frozenset(SSH_PRIVATE_KEY_BASENAMES) | frozenset(
     {
-        "id_rsa",
-        "id_dsa",
-        "id_ecdsa",
-        "id_ed25519",
         "credentials",
         "credentials.json",
         "credentials.csv",

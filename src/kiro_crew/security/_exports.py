@@ -50,6 +50,7 @@ EXPORTED_NAMES: tuple[str, ...] = (
     "REFUSAL_DIAGNOSTIC_PREFIX",
     "RefusalDiagnostic",
     "RefusalSpanShape",
+    "SSH_PRIVATE_KEY_BASENAMES",
     "SUSPICIOUS_BASH_PATTERNS",
     "SecurityEvent",
     "SecurityEventLog",

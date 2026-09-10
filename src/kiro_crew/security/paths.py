@@ -82,6 +82,23 @@ def _leaf_basename(spec: str) -> str:
     return _leaf_segments(spec)[-1]
 
 
+# SSH private-key file BASENAMES, longest alternative first so a regex built by
+# joining them cannot let ``id_ecdsa`` split ``id_ecdsa_sk``. This is a separate
+# declaration from ``_SENSITIVE_HOME_DIRS`` below on purpose, and the distinction
+# is the whole reason it exists: that list fences the DIRECTORY a key normally
+# lives in, and a key copied out of ``~/.ssh`` (``/opt/deploy/id_rsa``,
+# ``~/backup/id_ed25519``) is invisible to it. Surfaces that check for a key by
+# NAME read this tuple instead of hand-rolling one; a hand-rolled list is how a
+# surface ends up complete for ``id_rsa`` and blind to the other five.
+SSH_PRIVATE_KEY_BASENAMES: tuple[str, ...] = (
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa_sk",
+    "id_ecdsa",
+    "id_ed25519_sk",
+    "id_ed25519",
+)
+
 _SENSITIVE_HOME_DIRS: list[str] = [
     # Gateway-owned Kiro auth staging. Owner-only filesystem mode does not
     # isolate another process running as the same UID, so every agent sandbox

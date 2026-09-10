@@ -69,6 +69,7 @@ from kiro_crew.sandbox import _AGENT_DENIED_ENV_KEYS
 from kiro_crew.security import (
     _SENSITIVE_HOME_DIRS,
     MAX_SCANNABLE_SOURCE_BODY_CHARS,
+    SSH_PRIVATE_KEY_BASENAMES,
     audit_bash_exfiltration,
     enabled_rule_ids,
     is_sensitive_bash_command,
@@ -122,6 +123,62 @@ _CRON_CRED_PATH_RE = re.compile(
     r"(?:^|[\s'\"=@/~`]|\$\{?HOME\}?)"
     r"(?:" + "|".join(re.escape(d) for d in _SENSITIVE_HOME_DIRS) + r")"
     r"(?:/|\s|['\"]|$)",
+    re.IGNORECASE,
+)
+# SSH private-key FILENAMES, matched as a whole token wherever they appear.
+# _CRON_CRED_PATH_RE above matches sensitive DIRECTORY names, so it catches
+# `cat ~/.ssh/id_rsa` and misses `find ~ -name id_rsa -exec cat {} \;`, which
+# never spells `.ssh` at all. That gap is reachable because `cc` deliberately
+# leaves `~/.ssh` READABLE so ssh/git/scp crons work (only `strict` hides it,
+# and SSH_AUTH_SOCK is scrubbed from the cron env, so there is no agent
+# alternative) -- see the accepted-residual comment in
+# `cron_script.run_command_sandboxed`.
+#
+# The token edges are word-character lookarounds, not a list of the characters
+# a shell tolerates beside a filename. A shell needs no space before an
+# operator, so `find ~ -name id_rsa|xargs od -An -tx1` puts `|` flush against
+# the basename, and an enumerated edge class is always one character short of
+# the next spelling -- `|`, `;`, `&`, a backtick, `(`. One `\w` edge takes all
+# of them at once. Nothing downstream stands in for it: a hex byte-dump of a
+# key carries no credential SHAPE, so the stdout redaction cannot see it.
+#
+# The PUBLIC halves are deliberately NOT matched -- `.pub` and OpenSSH's
+# certificate `-cert.pub`. Neither carries a secret, so refusing them guards
+# nothing and blocks ordinary work such as `ssh-keygen -lf /opt/deploy/id_rsa.pub`
+# or shipping `id_rsa-cert.pub` to a host. A public half under a credential
+# directory (`cat ~/.ssh/id_rsa.pub`) stays refused by _CRON_CRED_PATH_RE.
+#
+# The names live in one tuple because two checks read them: this literal regex,
+# and the glob matcher below, which tests a glob-bearing word against them as
+# patterns. A name added here is covered by both.
+#
+# This closes the by-filename spelling, literal or globbed. It is NOT a fence: a
+# recursive reader that names neither the directory nor the file (`grep -r
+# 'PRIVATE KEY' ~`, `tar czf - ~`) and any interpreter composing the path at run
+# time still reach the key. The stdout redaction in `run_command_sandboxed`
+# covers a direct dump of one; the remaining runtime residual is documented
+# there.
+#
+# The names come from the canonical `security.SSH_PRIVATE_KEY_BASENAMES`, read
+# directly rather than through a module-private alias: a second name for one
+# tuple is how a reader ends up pointing at the stale copy. Three readers here
+# -- this regex, the glob probe table below, and the script-body scan in
+# `_vet_script_contents`.
+# The two surfaces that refuse a key basename -- the command vet and the
+# script-body scan -- word their refusal identically apart from the noun, so
+# the sentence lives here once. Two near-identical literals drift: one gets
+# the corrected advice and the other keeps the stale wording, and a user who
+# hits the other surface is told something different about the same rule.
+_CRON_SSH_KEY_REFUSAL = (
+    "Error: cron {surface} blocked: names an SSH private key file "
+    "(id_rsa, id_ed25519, ...). Cron {surface}s may not read key files; "
+    "let ssh/git find the key through ~/.ssh/config instead."
+)
+_CRON_SSH_KEY_BASENAME_RE = re.compile(
+    r"(?<![0-9A-Za-z_])"
+    r"(?:" + "|".join(re.escape(n) for n in SSH_PRIVATE_KEY_BASENAMES) + r")"
+    r"(?!(?:-cert)?\.pub\b)"
+    r"(?![0-9A-Za-z_])",
     re.IGNORECASE,
 )
 # Protected secret env vars a cron command must not read by name. Union of the
@@ -218,6 +275,44 @@ _CRON_GLOB_META_RE = re.compile(r"\[[^]]*\]|[?*]")
 # can legitimately match one; it bounds fnmatch's superlinear pattern compile
 # on a hostile `cat ????...`.
 _CRON_MAX_GLOB_WORD = 256
+# What a glob-bearing word is matched against, and how much shared literal text
+# counts as evidence for that probe.
+#
+# A sensitive DIRECTORY name is a dotfile, and sh will not let a leading
+# wildcard match a leading dot, so a window lining up with `.ssh` already had to
+# spell the dot -- one shared literal is evidence enough, which is the rule that
+# has always applied here.
+#
+# An SSH key BASENAME is neither a dotfile nor path-anchored, so that rule is too
+# weak for it: `cat ~/notes/*a` shares `a` with `id_rsa` and targets nothing. The
+# probe therefore asks for a literal RUN of three characters that appears in the
+# name -- `i[d]_rsa`, `id_rs?` and `*_rsa` all carry one, `*a` and `*.log` carry
+# none.
+_CRON_GLOB_PROBES: tuple[tuple[str, int], ...] = tuple(
+    [(d.lower(), 1) for d in _SENSITIVE_HOME_DIRS]
+    + [(n.lower(), 3) for n in SSH_PRIVATE_KEY_BASENAMES]
+)
+# Splits a glob word into its literal runs -- the text a shell must match
+# character for character.
+_CRON_GLOB_LITERAL_RUN_RE = re.compile(r"[*?\[\]/]+")
+
+
+def _glob_shares_literal(window: str, probe: str, min_run: int) -> bool:
+    """True when *window* shares enough literal text with *probe* to be evidence.
+
+    A window made only of wildcards matches every probe, so overlap has to be
+    measured on the literal characters alone. ``min_run`` is how long a single
+    unbroken literal run must be: 1 restores the plain shared-character test the
+    directory probes use, and a higher bound is what keeps an ordinary glob that
+    happens to share one letter with a key name from reading as targeting it.
+    """
+    if min_run <= 1:
+        return bool((set(window) - set("*?[]/")) & set(probe))
+    return any(
+        len(run) >= min_run and run in probe for run in _CRON_GLOB_LITERAL_RUN_RE.split(window)
+    )
+
+
 # Local variable assignments used to smuggle path fragments past the vet:
 # `A=.s; B=sh; cp ~/$A$B/id_rsa ...` — the vetter sees `~/` and `/id_rsa` as
 # separate tokens and misses the assembled `~/.ssh/id_rsa`.
@@ -293,12 +388,16 @@ def _split_segments(command: str) -> list[tuple[str, str]]:
 
 
 def _glob_could_reach_credentials(command: str) -> bool:
-    """True when a glob in *command* could expand onto a credential path.
+    """True when a glob in *command* could expand onto a credential.
 
-    Pathname expansion composes a path the literal text never contains:
-    ``cat ~/.s?h/id_rsa`` reads ``~/.ssh/id_rsa``. Rather than refuse every
+    Pathname expansion composes a name the literal text never contains:
+    ``cat ~/.s?h/id_rsa`` reads ``~/.ssh/id_rsa``, and ``find ~ -name 'i[d]_rsa'``
+    reaches the key without spelling it. Rather than refuse every
     ``*``/``?``/``[`` — which would break ordinary crons like ``rm /tmp/*.log``
-    — each glob-bearing word is tested AS A GLOB against the sensitive names.
+    — each glob-bearing word is tested AS A GLOB against every probe in
+    ``_CRON_GLOB_PROBES``: the sensitive directory names, and the SSH private-key
+    basenames. Both are matched by the same pass, so a glob spelling cannot be a
+    hole that the literal checks have closed.
 
     Matching rather than substituting is what makes this exact and independent of
     how many metacharacters the word carries. Substituting one metacharacter at a
@@ -354,8 +453,7 @@ def _glob_could_reach_credentials(command: str) -> bool:
         if not candidate:
             continue
         cand_segments = candidate.lower().split("/")
-        for sensitive in _SENSITIVE_HOME_DIRS:
-            probe = sensitive.lower()
+        for probe, min_literal_run in _CRON_GLOB_PROBES:
             depth = probe.count("/") + 1
             # Slide a `depth`-wide, segment-aligned window across the WHOLE
             # candidate, not just its leading segments. A sensitive name is a
@@ -385,14 +483,12 @@ def _glob_could_reach_credentials(command: str) -> bool:
                 if not (fnmatch.fnmatch(window, probe) or fnmatch.fnmatch(probe, window)):
                     continue
                 # A window made only of wildcards/separators matches EVERY
-                # sensitive name, so a benign `~/projects/*/dist` would "match"
-                # `.aws`. That is not targeting — a glob is evidence only when it
-                # shares a literal, non-wildcard character with the sensitive
-                # name it lines up against. Requiring one overlapping literal
-                # keeps `.s?h`/`.ss*` (which carry `.`, `s`, `h`) while dropping a
-                # standalone `*`.
-                literals = set(window) - set("*?[]/")
-                if literals & set(probe):
+                # probe, so a benign `~/projects/*/dist` would "match" `.aws`.
+                # That is not targeting — a glob is evidence only when it shares
+                # literal, non-wildcard text with the name it lines up against.
+                # How much text counts is the probe's own bound; see
+                # _CRON_GLOB_PROBES.
+                if _glob_shares_literal(window, probe, min_literal_run):
                     return True
     return False
 
@@ -609,6 +705,76 @@ def _vet_command_governance(command: str) -> str | None:
     return None
 
 
+def _vet_command_credential_names(command: str) -> str | None:
+    """Refuse a cron command that names a credential path or an SSH private key.
+
+    Split out of :func:`_vet_shell_command` because it is the one part of that
+    vet the FIRE-TIME gate has to re-run. ``cron_add`` vets a command once, when
+    it is authored, so a job authored BEFORE this check shipped keeps its command
+    verbatim; the fire-time gate re-ran only the governance ceiling, which left a
+    legacy ``find ~ -name id_rsa -exec od -An -tx1 {} ;`` job firing forever, and
+    a byte-dump encoding is precisely the shape the result-path redaction cannot
+    match. :func:`vet_job_at_fire_time` therefore calls this too, which makes its
+    command branch symmetric with its script branch — that one already re-scans
+    the body through :func:`_vet_script_contents`, so a script cron carrying the
+    same spelling was refused at fire time while a command cron was not.
+
+    Deliberately NOT the whole of :func:`_vet_shell_command`. The syntax
+    restrictions there (command substitution, brace expansion, loops, unresolved
+    variable references) are authoring-surface rules; re-running them at fire
+    time would start failing long-standing jobs whose only sin is a
+    ``$(date +%F)`` — a migration, not a security fix. What is here is bounded
+    text normalization plus regex: the tracked-assignment substitution, the
+    quote/backslash views, the credential-path and key-basename patterns, and
+    the glob-probe pass. No governance resolution, no config read, no platform
+    context, so it costs nothing on a path that runs before every fire.
+
+    Returns an ``"Error: ..."`` string, or ``None`` when the command names no
+    credential.
+    """
+    # sh performs parameter expansion AND quote removal in one word-expansion
+    # pass, so the scan must consider the string after BOTH, in BOTH orders — a
+    # single variant that does only one of them, or does them in only one order,
+    # leaves a gap:
+    #   `A=.s''sh; cp ~/$A/id_rsa`    quotes are in the VALUE  -> unquote then resolve
+    #   `A=.ss; cp ~/$A'h'/id_rsa`    quotes are in the COMMAND -> resolve then unquote
+    # `_substitute_local_assignments` already strips quotes from assignment
+    # VALUES, so `resolve then unquote` (unquoting its output) covers the second
+    # case, and `unquote then resolve` covers the first. Scanning the raw and
+    # each single-transform form too keeps the earlier cases intact.
+
+    def _unquote(s: str) -> str:
+        return s.replace('"', "").replace("'", "")
+
+    # sh also drops an escaping backslash during word expansion, so `~/.ss\h`
+    # names `.ssh` while the literal text keeps the name split. Unescaping runs
+    # AFTER unquoting: inside single quotes a backslash is literal, a difference
+    # the unquoted view does not preserve, so this view over-approximates --
+    # a refusal on `'.ss\h'` is a false positive the vet accepts.
+    resolved = _substitute_local_assignments(command)
+    unquoted = _unquote(command)
+    unescaped = _BACKSLASH_ESCAPE_RE.sub(r"\1", unquoted)
+    variants = (
+        command,
+        resolved,
+        unquoted,
+        _unquote(resolved),
+        _substitute_local_assignments(unquoted),
+        unescaped,
+        _substitute_local_assignments(unescaped),
+    )
+    for variant in variants:
+        if _CRON_CRED_PATH_RE.search(variant) or _glob_could_reach_credentials(variant):
+            return (
+                "Error: cron command blocked: references a credential path "
+                "(e.g. .aws/.ssh/.netrc). Cron commands may not read credential "
+                "files directly."
+            )
+        if _CRON_SSH_KEY_BASENAME_RE.search(variant):
+            return _CRON_SSH_KEY_REFUSAL.format(surface="command")
+    return None
+
+
 def _vet_shell_command(command: str) -> str | None:
     """Apply the bash-tool security guards to a model-supplied cron shell command.
 
@@ -725,44 +891,10 @@ def _vet_shell_command(command: str) -> str | None:
     gov_reason = _vet_command_governance(command)
     if gov_reason:
         return gov_reason
-    # sh performs parameter expansion AND quote removal in one word-expansion
-    # pass, so the scan must consider the string after BOTH, in BOTH orders — a
-    # single variant that does only one of them, or does them in only one order,
-    # leaves a gap:
-    #   `A=.s''sh; cp ~/$A/id_rsa`    quotes are in the VALUE  -> unquote then resolve
-    #   `A=.ss; cp ~/$A'h'/id_rsa`    quotes are in the COMMAND -> resolve then unquote
-    # `_substitute_local_assignments` already strips quotes from assignment
-    # VALUES, so `resolve then unquote` (unquoting its output) covers the second
-    # case, and `unquote then resolve` covers the first. Scanning the raw and
-    # each single-transform form too keeps the earlier cases intact.
-
-    def _unquote(s: str) -> str:
-        return s.replace('"', "").replace("'", "")
-
-    # sh also drops an escaping backslash during word expansion, so `~/.ss\h`
-    # names `.ssh` while the literal text keeps the name split. Unescaping runs
-    # AFTER unquoting: inside single quotes a backslash is literal, which the
-    # unquoted view no longer distinguishes, so this view over-approximates --
-    # a refusal on `'.ss\h'` is a false positive the vet accepts.
+    cred_reason = _vet_command_credential_names(command)
+    if cred_reason:
+        return cred_reason
     resolved = _substitute_local_assignments(command)
-    unquoted = _unquote(command)
-    unescaped = _BACKSLASH_ESCAPE_RE.sub(r"\1", unquoted)
-    variants = (
-        command,
-        resolved,
-        unquoted,
-        _unquote(resolved),
-        _substitute_local_assignments(unquoted),
-        unescaped,
-        _substitute_local_assignments(unescaped),
-    )
-    for variant in variants:
-        if _CRON_CRED_PATH_RE.search(variant) or _glob_could_reach_credentials(variant):
-            return (
-                "Error: cron command blocked: references a credential path "
-                "(e.g. .aws/.ssh/.netrc). Cron commands may not read credential "
-                "files directly."
-            )
     if _CRON_SECRET_ENV_RE.search(command):
         return "Error: cron command blocked: references a protected secret environment variable"
     # After resolving tracked local assignments, any variable reference STILL
@@ -841,6 +973,27 @@ def _vet_script_contents(text: str) -> str | None:
             "Error: cron script blocked: references a credential path "
             "(e.g. .aws/.ssh/.netrc). Cron scripts may not read credential files."
         )
+    # The same by-FILENAME spelling the command vet refuses, on the same footing
+    # as the credential-path scan directly above. A script cron runs under
+    # `standard`, which leaves `~/.ssh` readable just as `cc` does, so a body
+    # that walks for `id_rsa` reads the key without ever naming `.ssh` -- and a
+    # hex-encoded dump of it carries no credential SHAPE for the result
+    # redaction to catch. This is one more whole-body, source-aware literal
+    # regex, the class of detector this function already applies; it does NOT
+    # route the body through `is_denied` / `is_sensitive_bash_command`, which is
+    # the thing that produced permanent false denials on ordinary scripts.
+    #
+    # One ACCEPTED FALSE POSITIVE comes with it, and it is narrow: the
+    # public-half exemption reads the characters after the name, so a body that
+    # ASSEMBLES the path out of fragments (`k = "id_rsa"` then `f"/opt/d/{k}.pub"`)
+    # presents the bare token with a quote after it and is refused, even though
+    # only the public half is ever opened. Spelling the path contiguously
+    # (`"/opt/d/id_rsa.pub"`) is accepted, so the escape hatch costs one edit and
+    # needs no new rule. Teaching the check to follow a value across fragments
+    # means interpreting the body, which is the shell-detector road this function
+    # deliberately does not take.
+    if _CRON_SSH_KEY_BASENAME_RE.search(text):
+        return _CRON_SSH_KEY_REFUSAL.format(surface="script")
     if _CRON_SECRET_ENV_RE.search(text) or _CRON_SECRET_NAME_RE.search(text):
         return "Error: cron script blocked: references a protected secret environment variable"
     exfil = scan_exfiltration_urls(text)
@@ -910,7 +1063,9 @@ def vet_job_at_fire_time(job: CronJob) -> str | None:
       (:func:`_vet_cron_capability_governance`), keyed ``cron:<job.id>`` so the
       SEL deny trail names the blocked job;
     - ``command`` jobs: the governance ``commands`` ceiling over the command
-      body (:func:`_vet_command_governance`);
+      body (:func:`_vet_command_governance`), then the credential-name refusal
+      (:func:`_vet_command_credential_names`) so a job authored before that
+      check shipped is re-judged against it instead of firing forever;
     - ``script`` jobs: the script BODY re-scan (:func:`_vet_script_file`) on the
       freshly re-resolved path, so an on-disk edit after authoring is caught.
 
@@ -941,6 +1096,18 @@ def vet_job_at_fire_time(job: CronJob) -> str | None:
         # capability gate above — audit it in its own right so the SEL trail
         # shows every permission decision that authorized this execution.
         _audit_fire_time_decision(job.id, "commands", "allowed")
+        # An always-on check, not a governance one, and the reason this branch
+        # re-runs anything beyond governance at all: the credential/key-name
+        # refusal is newer than the jobs on disk. A command job authored before
+        # it shipped was vetted by the rules of its own authoring day, and only
+        # governance was ever re-applied — so it kept firing. The script branch
+        # below has always re-scanned its body, which is what makes running this
+        # here a restoration of symmetry rather than a new fire-time policy.
+        reason = _vet_command_credential_names(job.command)
+        if reason:
+            _audit_fire_time_decision(job.id, "cron_command_credentials", "denied", reason)
+            return reason
+        _audit_fire_time_decision(job.id, "cron_command_credentials", "allowed")
     elif job.script:
         script_path, _ = resolve_script_path(job.script)
         reason = _vet_script_file(script_path)

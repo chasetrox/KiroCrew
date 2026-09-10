@@ -11,7 +11,7 @@ import re
 from http.server import BaseHTTPRequestHandler
 from typing import Any
 
-from kiro_crew.security import DENIED_ROOT_PARTS
+from kiro_crew.security import DENIED_ROOT_PARTS, SSH_PRIVATE_KEY_BASENAMES
 
 Response = tuple[int, str, bytes]
 
@@ -146,7 +146,13 @@ UNBUNDLED_EXTS = (".ts", ".tsx", ".jsx")
 
 # Containment alone intentionally does not authorize credential and VCS
 # material that happens to live inside a registered project root.
-PROJECT_SECRET_NAMES: frozenset[str] = frozenset(
+#
+# The SSH key names are DERIVED from `security.SSH_PRIVATE_KEY_BASENAMES` for the
+# same reason `PROJECT_SECRET_DIRS` below derives from `DENIED_ROOT_PARTS`: a
+# hand-rolled copy goes stale. Spelled out here it listed four names and omitted
+# the hardware-backed `id_ecdsa_sk` / `id_ed25519_sk` forms, so the preview server
+# would serve an `_sk` private key sitting in a previewed project tree.
+PROJECT_SECRET_NAMES: frozenset[str] = frozenset(SSH_PRIVATE_KEY_BASENAMES) | frozenset(
     {
         ".npmrc",
         ".netrc",
@@ -154,10 +160,6 @@ PROJECT_SECRET_NAMES: frozenset[str] = frozenset(
         ".git-credentials",
         ".htpasswd",
         ".app_secret",
-        "id_rsa",
-        "id_dsa",
-        "id_ecdsa",
-        "id_ed25519",
         "credentials",
         "secring.gpg",
     }

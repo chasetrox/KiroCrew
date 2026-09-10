@@ -17,7 +17,7 @@ import ast
 import re
 from typing import List, Tuple
 
-from kiro_crew.security import _SENSITIVE_HOME_DIRS
+from kiro_crew.security import _SENSITIVE_HOME_DIRS, SSH_PRIVATE_KEY_BASENAMES
 
 # Hard cap per script. Larger => the generator went off-task.
 MAX_SCRIPT_BYTES = 4096
@@ -49,9 +49,22 @@ _SENSITIVE_PATH_RE = re.compile(
     + r")(?!\w)",
     re.I,
 )
+# SSH private-key basenames, from the canonical ``security.SSH_PRIVATE_KEY_BASENAMES``
+# for the same reason ``_SENSITIVE_PATH_RE`` derives from ``_SENSITIVE_HOME_DIRS``:
+# this rule was a hand-rolled ``\bid_rsa\b``, so it was complete for one key type
+# and blind to the five others, on a gate whose own header rejects maintaining a
+# partial list. The path rule above already covers anything under ``~/.ssh``; these
+# names are what catch a key COPIED out of it. Unlike the cron surface this does
+# NOT exempt the public half: a generated skill script has no business naming
+# either half of a key pair, and exempting ``.pub`` here would SUBTRACT from what
+# this gate already refuses.
+_SSH_KEY_BASENAME_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(n) for n in SSH_PRIVATE_KEY_BASENAMES) + r")\b",
+    re.I,
+)
 _SENSITIVE = [
     (re.compile(r"\b169\.254\.169\.254\b"), "credential access: cloud metadata IP"),
-    (re.compile(r"\bid_rsa\b", re.I), "credential access: id_rsa"),
+    (_SSH_KEY_BASENAME_RE, "credential access: SSH private key basename"),
     (re.compile(r"os\.environ\[[\"'][A-Z_]*(TOKEN|SECRET|KEY|PASSWORD)", re.I),
      "credential access: reads a secret env var"),
     (re.compile(r"os\.(?:getenv|environ\.get)\(\s*[\"'][A-Z_]*(TOKEN|SECRET|KEY|PASSWORD)", re.I),
