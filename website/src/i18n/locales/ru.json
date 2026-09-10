@@ -9650,9 +9650,12 @@
       "nudgeCard": {
         "auto_nudge": "Автоподталкивание",
         "auto_nudge_cycle": "Автоподталкивание · цикл {{count}}",
+        "collapse": "Скрыть инструкцию",
+        "expand": "Показать инструкцию",
         "hide_nudge_instructions": "Скрыть инструкции подталкивания",
-        "loop": "Цикл",
-        "show_nudge_instructions": "Показать инструкции подталкивания"
+        "loop": "Показать цикл",
+        "show_nudge_instructions": "Показать инструкции подталкивания",
+        "view_loop_title": "Открыть состояние и управление этим циклом автоподталкивания"
       },
       "pinnedPrompt": {
         "collapse_pinned_prompt": "Свернуть закреплённый ход",

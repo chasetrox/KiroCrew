@@ -9388,9 +9388,12 @@
       "nudgeCard": {
         "auto_nudge": "ऑटो-नज",
         "auto_nudge_cycle": "ऑटो-नज · चक्र {{count}}",
+        "collapse": "निर्देश छिपाएँ",
+        "expand": "निर्देश दिखाएँ",
         "hide_nudge_instructions": "नज निर्देश छिपाएँ",
-        "loop": "लूप",
-        "show_nudge_instructions": "नज निर्देश दिखाएँ"
+        "loop": "लूप देखें",
+        "show_nudge_instructions": "नज निर्देश दिखाएँ",
+        "view_loop_title": "इस ऑटो-नज लूप की स्थिति और नियंत्रण खोलें"
       },
       "pinnedPrompt": {
         "collapse_pinned_prompt": "पिन किया गया टर्न संक्षिप्त करें",

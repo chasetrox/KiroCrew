@@ -9257,9 +9257,12 @@
       "nudgeCard": {
         "auto_nudge": "自动推动",
         "auto_nudge_cycle": "自动推动 · 第 {{count}} 轮",
+        "collapse": "收起指令",
+        "expand": "展开指令",
         "hide_nudge_instructions": "隐藏推动指令",
-        "loop": "循环",
-        "show_nudge_instructions": "显示推动指令"
+        "loop": "查看循环",
+        "show_nudge_instructions": "显示推动指令",
+        "view_loop_title": "打开这个自动推动循环的状态与控制"
       },
       "pinnedPrompt": {
         "collapse_pinned_prompt": "收起置顶轮次",

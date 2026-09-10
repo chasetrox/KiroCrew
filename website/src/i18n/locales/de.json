@@ -9388,9 +9388,12 @@
       "nudgeCard": {
         "auto_nudge": "Auto-Anstoß",
         "auto_nudge_cycle": "Auto-Anstoß · Zyklus {{count}}",
+        "collapse": "Anweisung ausblenden",
+        "expand": "Anweisung anzeigen",
         "hide_nudge_instructions": "Anstoß-Anweisungen ausblenden",
-        "loop": "Schleife",
-        "show_nudge_instructions": "Anstoß-Anweisungen anzeigen"
+        "loop": "Schleife anzeigen",
+        "show_nudge_instructions": "Anstoß-Anweisungen anzeigen",
+        "view_loop_title": "Status und Steuerung dieser Auto-Anstoß-Schleife öffnen"
       },
       "pinnedPrompt": {
         "collapse_pinned_prompt": "Angehefteten Zug einklappen",

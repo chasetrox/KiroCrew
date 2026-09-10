@@ -9519,9 +9519,12 @@
       "nudgeCard": {
         "auto_nudge": "Auto-nudge",
         "auto_nudge_cycle": "Auto-nudge · ciclo {{count}}",
+        "collapse": "Ocultar instrução",
+        "expand": "Mostrar instrução",
         "hide_nudge_instructions": "Ocultar instruções do nudge",
-        "loop": "Loop",
-        "show_nudge_instructions": "Mostrar instruções do nudge"
+        "loop": "Ver loop",
+        "show_nudge_instructions": "Mostrar instruções do nudge",
+        "view_loop_title": "Abrir o estado e os controles deste loop de auto-nudge"
       },
       "pinnedPrompt": {
         "collapse_pinned_prompt": "Recolher turno fixado",

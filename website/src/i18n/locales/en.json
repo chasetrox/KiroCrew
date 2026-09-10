@@ -6125,7 +6125,7 @@
         "delete": "Delete"
       },
       "nudgeCard": {
-        "loop": "Loop"
+        "loop": "View loop"
       },
       "pinnedPrompt": {
         "collapse_pinned_prompt": "Collapse pinned turn",

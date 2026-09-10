@@ -9257,9 +9257,12 @@
       "nudgeCard": {
         "auto_nudge": "자동 넛지",
         "auto_nudge_cycle": "자동 넛지 · 사이클 {{count}}",
+        "collapse": "지시 접기",
+        "expand": "지시 펼치기",
         "hide_nudge_instructions": "넛지 지시 숨기기",
-        "loop": "루프",
-        "show_nudge_instructions": "넛지 지시 표시"
+        "loop": "루프 보기",
+        "show_nudge_instructions": "넛지 지시 표시",
+        "view_loop_title": "이 자동 넛지 루프의 상태와 제어 열기"
       },
       "pinnedPrompt": {
         "collapse_pinned_prompt": "고정한 턴 접기",

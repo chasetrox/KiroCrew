@@ -9388,9 +9388,12 @@
       "nudgeCard": {
         "auto_nudge": "স্বয়ংক্রিয় নাজ",
         "auto_nudge_cycle": "স্বয়ংক্রিয় নাজ · সাইকেল {{count}}",
+        "collapse": "নির্দেশ লুকান",
+        "expand": "নির্দেশ দেখান",
         "hide_nudge_instructions": "নাজের নির্দেশ লুকাও",
-        "loop": "লুপ",
-        "show_nudge_instructions": "নাজের নির্দেশ দেখাও"
+        "loop": "লুপ দেখুন",
+        "show_nudge_instructions": "নাজের নির্দেশ দেখাও",
+        "view_loop_title": "এই স্বয়ংক্রিয় নাজ লুপের অবস্থা ও নিয়ন্ত্রণ খুলুন"
       },
       "pinnedPrompt": {
         "collapse_pinned_prompt": "পিন করা টার্ন সংকুচিত করুন",

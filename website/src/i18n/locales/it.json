@@ -9519,9 +9519,12 @@
       "nudgeCard": {
         "auto_nudge": "Sollecito automatico",
         "auto_nudge_cycle": "Sollecito automatico · ciclo {{count}}",
+        "collapse": "Nascondi istruzione",
+        "expand": "Mostra istruzione",
         "hide_nudge_instructions": "Nascondi le istruzioni del sollecito",
-        "loop": "Ciclo",
-        "show_nudge_instructions": "Mostra le istruzioni del sollecito"
+        "loop": "Vedi ciclo",
+        "show_nudge_instructions": "Mostra le istruzioni del sollecito",
+        "view_loop_title": "Apri stato e controlli di questo ciclo di sollecito automatico"
       },
       "pinnedPrompt": {
         "collapse_pinned_prompt": "Comprimi turno fissato",

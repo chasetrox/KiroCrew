@@ -9519,9 +9519,12 @@
       "nudgeCard": {
         "auto_nudge": "Empujón automático",
         "auto_nudge_cycle": "Empujón automático · ciclo {{count}}",
+        "collapse": "Ocultar instrucción",
+        "expand": "Mostrar instrucción",
         "hide_nudge_instructions": "Ocultar las instrucciones del empujón",
-        "loop": "Bucle",
-        "show_nudge_instructions": "Mostrar las instrucciones del empujón"
+        "loop": "Ver bucle",
+        "show_nudge_instructions": "Mostrar las instrucciones del empujón",
+        "view_loop_title": "Abrir el estado y los controles de este bucle de empujón automático"
       },
       "pinnedPrompt": {
         "collapse_pinned_prompt": "Contraer turno fijado",

@@ -9257,9 +9257,12 @@
       "nudgeCard": {
         "auto_nudge": "自動ナッジ",
         "auto_nudge_cycle": "自動ナッジ · サイクル {{count}}",
+        "collapse": "指示を閉じる",
+        "expand": "指示を表示",
         "hide_nudge_instructions": "ナッジの指示を非表示",
-        "loop": "ループ",
-        "show_nudge_instructions": "ナッジの指示を表示"
+        "loop": "ループを表示",
+        "show_nudge_instructions": "ナッジの指示を表示",
+        "view_loop_title": "この自動ナッジループの状態と操作を開く"
       },
       "pinnedPrompt": {
         "collapse_pinned_prompt": "固定したターンを折りたたむ",

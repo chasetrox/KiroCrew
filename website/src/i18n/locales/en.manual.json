@@ -3515,8 +3515,11 @@
       "nudgeCard": {
         "auto_nudge": "Auto-nudge",
         "auto_nudge_cycle": "Auto-nudge · cycle {{count}}",
+        "collapse": "Hide instruction",
+        "expand": "Show instruction",
         "hide_nudge_instructions": "Hide nudge instructions",
-        "show_nudge_instructions": "Show nudge instructions"
+        "show_nudge_instructions": "Show nudge instructions",
+        "view_loop_title": "Open this auto-nudge loop's status and controls"
       },
       "sideChat": {
         "ask_a_side_question_2": "Ask a side question…",
