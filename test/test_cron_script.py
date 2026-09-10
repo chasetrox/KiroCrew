@@ -12,6 +12,7 @@ import pytest
 
 from kiro_crew import platform_compat as pc
 from kiro_crew.cron_script import (
+    _MAX_COMMAND_OUTPUT,
     Done,
     Report,
     ScriptContext,
@@ -218,6 +219,61 @@ class TestRunCommandSandboxed:
         with patch("subprocess.Popen", return_value=mock_proc):
             result = run_command_sandboxed("boom")
         assert result["output"].endswith("stderr:\nshort failure")
+
+    def test_success_path_redacts_stdout(self):
+        """An exit-0 command's stdout is the job result, so it must be redacted.
+
+        ``mode="cc"`` leaves ``~/.ssh`` readable so git/scp crons work, so
+        ``cat ~/.ssh/id_rsa`` exits 0 and hands the key straight to the cron
+        result, which is delivered to chat and persisted in cron history. Exit 0
+        is the path a key dump takes, so this pins redaction on it.
+        """
+        # Assembled at runtime so no key-shaped literal lands in the repo.
+        label = "OPENSSH PRIVATE" + " KEY"
+        key_body = "b" * 64
+        pem = f"-----BEGIN {label}-----\n{key_body}\n-----END {label}-----"
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate.return_value = (pem, "")
+        with patch("subprocess.Popen", return_value=mock_proc):
+            result = run_command_sandboxed("read-the-key")
+        assert result["status"] == "ok"
+        assert result["exit_code"] == 0
+        assert key_body not in result["output"]
+        assert label not in result["output"]
+        # Positive proof the payload flowed through redaction rather than the
+        # result simply coming back empty.
+        assert "credential]" in result["output"]
+
+    def test_success_path_leaves_ordinary_stdout_unchanged(self):
+        """Redaction must not rewrite output that carries no credential."""
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate.return_value = ("disk usage: 41% of /home\n", "")
+        with patch("subprocess.Popen", return_value=mock_proc):
+            result = run_command_sandboxed("df -h")
+        assert result["status"] == "ok"
+        assert result["output"] == "disk usage: 41% of /home\n"
+
+    def test_stdout_is_redacted_before_the_64kb_slice(self):
+        """A credential straddling the 64KB cap must not leak its tail.
+
+        Same ordering rule as the stderr tail: slicing first can cut off the
+        pattern's detectable prefix, so the raw remainder survives redaction.
+        """
+        fake_key = "AKIA" + "B" * 16  # matches the AWS access-key-id pattern
+        # Sized so the 64KB slice would cut the credential two chars in.
+        padding = "p" * (_MAX_COMMAND_OUTPUT - 2)
+        stdout_text = padding + fake_key + "tail"
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate.return_value = (stdout_text, "")
+        with patch("subprocess.Popen", return_value=mock_proc):
+            result = run_command_sandboxed("dump")
+        assert result["status"] == "ok"
+        assert fake_key not in result["output"]
+        assert "B" * 16 not in result["output"]
+        assert "truncated" in result["output"]
 
 
 class TestCronSandboxUnavailableIsStructuredNotRaised:

@@ -2206,6 +2206,17 @@ def run_command_sandboxed(
                 "output": "Cancelled by user",
                 "exit_code": proc.returncode,
             }
+        # Redact the captured stdout on EVERY exit path, success included. The
+        # command is model-supplied and runs under mode="cc", which leaves
+        # ~/.ssh readable, so `cat ~/.ssh/id_rsa` exits 0 and its stdout IS the
+        # job result -- delivered to chat and persisted in cron history. Exit 0
+        # is the path a key dump takes, so it needs redaction at least as much
+        # as the non-zero-exit stderr tail below. Redact the WHOLE text BEFORE
+        # the 64KB slice, for the same reason as that stderr tail: slicing first
+        # could cut off a credential's detectable prefix (e.g. the BEGIN line of
+        # a PEM key, or the scheme of a token-bearing URL), letting the raw
+        # secret tail through redaction.
+        output = redact(output)
         if len(output) > _MAX_COMMAND_OUTPUT:
             output = output[:_MAX_COMMAND_OUTPUT] + "\n\n[truncated — output exceeded 64KB]"
         if proc.returncode != 0:
