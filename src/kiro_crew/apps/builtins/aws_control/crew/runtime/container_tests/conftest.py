@@ -22,12 +22,54 @@ it should be stated somewhere that survives a change to either.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import os
 import sys
 from pathlib import Path
 
+import pytest
+
 _BUILD_CONTEXT = Path(__file__).resolve().parents[1]
+_HERE = Path(__file__).resolve().parent
+
+# The one lane whose entire purpose is to run this suite sets this. Everywhere else
+# -- a developer's laptop, the application's own CI shards -- leaves it unset, and
+# the skips below stay skips.
+#
+# It exists because a skip is indistinguishable from a pass in every report anyone
+# reads, and this suite proved it: 226 tests sat in a green pull request having
+# executed zero times, because the application's CI environment does not carry the
+# image's runtime dependencies and ``collect_ignore_glob`` answered that by
+# collecting nothing. Installing those dependencies in a dedicated job fixes today's
+# instance and not the mechanism: the next dependency rename, extras split or
+# resolver change would put that lane back to green-while-measuring-nothing with no
+# signal anywhere.
+#
+# So the lane that installs them also declares that it MUST be able to run them, and
+# under that declaration every reason this file would decline to collect becomes a
+# hard error instead. The rule is one-directional on purpose: this variable can only
+# turn a skip into a failure, never a failure into a skip, so setting it can hide
+# nothing.
+_REQUIRED_ENV = "CREW_CONTAINER_TESTS_REQUIRED"
+_REQUIRED = bool(os.environ.get(_REQUIRED_ENV))
+
+# Floor on how many tests the suite must yield, checked only under _REQUIRED_ENV.
+#
+# Read off a real collection (236 items). The margin is 2, not a comfortable ten per
+# cent, and the tightness IS the feature: the smallest module here contributes 3
+# tests, so a floor of 234 is tripped by losing even the smallest one, which a looser
+# floor would wave through. The per-module check below catches a module that stops
+# being collected at all; this catches the subtler shape, a module still collected
+# but yielding fewer tests than it holds -- a parametrize source that silently
+# empties, a decorator that swallows its function, an import guard that turns a class
+# into nothing.
+#
+# When the suite grows, raise it. It may be LOWERED only alongside a deliberate
+# deletion of tests, in the same commit, and never to make a red lane green: a floor
+# edited down to meet the measurement measures nothing, which is where this suite
+# started.
+_MIN_COLLECTED = 234
 
 # Not collected on a non-POSIX host. This suite's SUBJECT is the source of a Linux
 # container image, built by the deploy driver and run on Fargate -- not part of the
@@ -71,9 +113,101 @@ _missing_image_deps = [
 ]
 
 if os.name != "posix":  # pragma: no cover - the excluded platform
-    collect_ignore_glob = ["test_*.py"]
+    _declined: str | None = f"the host is not POSIX (os.name is {os.name!r})"
 elif _missing_image_deps:  # pragma: no cover - the app CI env without image deps
+    _declined = "these image runtime dependencies are not importable: " + ", ".join(
+        _missing_image_deps
+    )
+else:
+    _declined = None
+
+if _declined is not None:  # pragma: no cover - decided by the host, not by a branch
+    if _REQUIRED:
+        raise RuntimeError(
+            f"{_REQUIRED_ENV} is set, so this environment declared that it must run "
+            f"the crew container suite, but it cannot: {_declined}. Refusing to skip. "
+            "A skip here reads as a pass in every report, which is how 226 tests came "
+            "to sit in a green pull request having never executed. Install the image's "
+            "runtime dependencies (container/requirements.txt) on a POSIX host, or "
+            f"unset {_REQUIRED_ENV} if this environment is not meant to run them."
+        )
     collect_ignore_glob = ["test_*.py"]
+
+
+def _modules_that_define_tests() -> set[str]:
+    """Names of the ``test_*.py`` files beside this one that define a test function.
+
+    Read from the source with ``ast``, never imported: this runs while deciding
+    whether collection was complete, and importing a module to find out would either
+    duplicate collection or hide the very import failure being looked for.
+
+    The filter matters because a file matching ``test_*.py`` is not necessarily a
+    test module. ``test_supervisor_fakes.py`` is named that way to sit inside one
+    track's ownership and deliberately defines no test function, so requiring every
+    ``test_*.py`` to yield an item fails on the tree as it stands. Asking the source
+    what it defines keeps the check exact and self-maintaining: add a test to that
+    helper and it starts being required, with nothing to remember.
+    """
+    named: set[str] = set()
+    for path in _HERE.glob("test_*.py"):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):  # pragma: no cover - unparseable is pytest's error
+            named.add(path.name)
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith(
+                "test"
+            ):
+                named.add(path.name)
+                break
+    return named
+
+
+def pytest_collection_modifyitems(
+    session: pytest.Session,
+    config: pytest.Config,
+    items: list[pytest.Item],
+) -> None:
+    """Under ``CREW_CONTAINER_TESTS_REQUIRED``, refuse a collection that came up short.
+
+    The import-time gate above proves the suite CAN be collected. This proves it WAS.
+    They are different failures, and only the second catches a module that quietly
+    stops yielding tests while every dependency is still importable.
+
+    Two checks, and the first is the one that cannot rot: the set of modules that
+    must yield tests is read off the filesystem, so it needs no maintenance and
+    cannot disagree with the tree. A module that defines tests and contributed no
+    collected item is an error whatever the reason. Deleting a test file legitimately
+    removes it from both sides and stays silent, which is why this check can be exact
+    rather than a floor. The count floor then covers what a presence check cannot
+    see.
+
+    Items outside this directory are ignored, so a wider run that happens to include
+    this suite is not judged by it.
+    """
+    if not _REQUIRED:
+        return
+    mine = [item for item in items if getattr(item, "path", None) is not None]
+    mine = [item for item in mine if item.path.parent == _HERE]
+    collected = {item.path.name for item in mine}
+    uncollected = sorted(_modules_that_define_tests() - collected)
+    if uncollected:
+        raise pytest.UsageError(
+            f"{_REQUIRED_ENV} is set and these modules define tests but contributed "
+            f"no collected test: {', '.join(uncollected)}. A module that collects "
+            "nothing is reported as neither a pass nor a failure, so this is an error "
+            "rather than a silence."
+        )
+    if len(mine) < _MIN_COLLECTED:
+        raise pytest.UsageError(
+            f"{_REQUIRED_ENV} is set and the crew container suite collected "
+            f"{len(mine)} tests, below its floor of {_MIN_COLLECTED}. Every module "
+            "that defines tests yielded at least one, so tests went missing inside "
+            "one of them. Find them rather than lowering the floor; lower it only in "
+            "the same commit as a deliberate deletion."
+        )
+
 
 # APPEND, never insert(0), and note the directory beside this one is named
 # ``container_tests`` rather than ``tests``. Both facts exist for the same reason.

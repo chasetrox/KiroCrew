@@ -193,19 +193,22 @@ def test_verify_layout_rejects_a_default_home(tmp_path, monkeypatch):
 
 
 def test_verify_sandbox_ok_when_namespaces_available(tmp_path):
-    entry.verify_sandbox(make_settings(tmp_path), probe=lambda: True)  # no raise
+    entry.verify_sandbox(make_settings(tmp_path), probe=lambda: entry.SANDBOX_AVAILABLE)
 
 
-def test_verify_sandbox_ok_when_probe_unknown(tmp_path):
-    # Non-Linux / can't probe -> do not block.
-    entry.verify_sandbox(make_settings(tmp_path), probe=lambda: None)
+def test_verify_sandbox_refuses_when_the_probe_cannot_answer(tmp_path):
+    # An undetermined probe refuses like a denial: sandboxed-only means the guard may
+    # never proceed on the absence of an answer, only on a positive one.
+    verdict = f"{entry.SANDBOX_UNDETERMINED_PREFIX}this platform has no os.unshare"
+    with pytest.raises(ConfigError, match="could not be determined"):
+        entry.verify_sandbox(make_settings(tmp_path), probe=lambda: verdict)
 
 
 def test_verify_sandbox_fails_loud_when_no_user_namespace(tmp_path):
     # Sandboxed-only: no user namespace means refuse to start. There is no opt-in
     # escape, and the message must not point at the removed config key.
     with pytest.raises(ConfigError, match="sandboxed-only") as exc:
-        entry.verify_sandbox(make_settings(tmp_path), probe=lambda: False)
+        entry.verify_sandbox(make_settings(tmp_path), probe=lambda: entry.SANDBOX_DENIED)
     assert "sandbox_allow_unsandboxed_exec" not in str(exc.value)
 
 

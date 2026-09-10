@@ -159,6 +159,14 @@ This container runs SANDBOXED-ONLY. There is deliberately no config key or env v
 that opts into unsandboxed execution, so on a host without a user namespace (Fargate
 today) the supervisor refuses to start rather than run the model subprocess exposed.
 
+**An undetermined probe refuses too.** The supervisor proceeds only on a positive
+verdict: a probe that cannot run (no `os.unshare`), cannot fork, or whose child
+neither succeeds nor reports a kernel refusal is a refusal, and the message repeats
+which of those it was. Reading "could not determine" as "probably fine" is the same
+shape of defect as reading the backend environment through a denylist -- it holds for
+the hosts already thought of and fails open on the next one, and failing open here
+means an auto-approving worker holding the model credential with no sandbox.
+
 Why there is no opt-in, and why the ECS boundary is not a substitute for one. The
 model subprocess auto-approves every tool (`--approval yolo` -- nothing in the
 container is there to click Approve) and its environment carries the model

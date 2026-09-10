@@ -7,7 +7,8 @@ opt-in to run unsandboxed, because the worker holds the model credential
 untrusted prompt content would be a credential-exfiltration path. So on a host
 without a user namespace the container refuses to start rather than run the model
 subprocess exposed. These pin that: it refuses when the probe reports no
-namespace, and only then.
+namespace, it refuses when the probe cannot reach an answer at all, and it
+proceeds only on a positive verdict.
 """
 
 from __future__ import annotations
@@ -47,7 +48,7 @@ def test_the_guard_refuses_when_no_user_namespace_is_available(tmp_path: Path) -
     """
     settings = make_settings(tmp_path)
     with pytest.raises(ConfigError, match="sandboxed-only"):
-        entry.verify_sandbox(settings, probe=lambda: False)
+        entry.verify_sandbox(settings, probe=lambda: entry.SANDBOX_DENIED)
 
 
 def test_the_refusal_names_the_missing_sandbox_not_a_missing_opt_in(tmp_path: Path) -> None:
@@ -59,17 +60,72 @@ def test_the_refusal_names_the_missing_sandbox_not_a_missing_opt_in(tmp_path: Pa
     """
     settings = make_settings(tmp_path)
     with pytest.raises(ConfigError) as exc:
-        entry.verify_sandbox(settings, probe=lambda: False)
+        entry.verify_sandbox(settings, probe=lambda: entry.SANDBOX_DENIED)
     assert "sandbox_allow_unsandboxed_exec" not in str(exc.value)
 
 
 def test_a_host_with_namespaces_starts(tmp_path: Path) -> None:
-    entry.verify_sandbox(make_settings(tmp_path), probe=lambda: True)  # no raise
+    entry.verify_sandbox(make_settings(tmp_path), probe=lambda: entry.SANDBOX_AVAILABLE)
 
 
-def test_an_unknown_probe_result_does_not_block(tmp_path: Path) -> None:
-    """Non-Linux: the probe cannot run, so it must not be read as unavailable."""
-    entry.verify_sandbox(make_settings(tmp_path), probe=lambda: None)
+def test_an_undetermined_probe_refuses(tmp_path: Path) -> None:
+    """A probe that could not reach an answer must refuse, not proceed.
+
+    This branch used to return, on the reasoning that a host where the probe cannot
+    run (non-Linux) is not a host where the sandbox is known to be missing. That is
+    the same defect as reading the backend environment through a denylist: it holds
+    for the cases someone already enumerated and fails OPEN on the next one. Failing
+    open here means booting a worker that auto-approves every tool and holds the
+    model credential with no evidence that a sandbox exists, so undetermined has to
+    refuse exactly as a denial does.
+    """
+    verdict = f"{entry.SANDBOX_UNDETERMINED_PREFIX}the probe could not fork a child"
+    with pytest.raises(ConfigError, match="could not be determined"):
+        entry.verify_sandbox(make_settings(tmp_path), probe=lambda: verdict)
+
+
+def test_an_undetermined_refusal_repeats_what_could_not_be_determined(tmp_path: Path) -> None:
+    """An operator needs the specific reason, not just that there was one.
+
+    'Something went wrong with the sandbox probe' is unactionable; 'this platform has
+    no os.unshare' and 'the probe child was killed by signal 9' lead to different
+    fixes. The verdict is carried into the refusal verbatim so the message names
+    which one it was.
+    """
+    verdict = (
+        f"{entry.SANDBOX_UNDETERMINED_PREFIX}the probe child was killed by signal 9 "
+        "before it could answer"
+    )
+    with pytest.raises(ConfigError) as exc:
+        entry.verify_sandbox(make_settings(tmp_path), probe=lambda: verdict)
+    assert "killed by signal 9" in str(exc.value)
+
+
+def test_an_unrecognised_verdict_refuses(tmp_path: Path) -> None:
+    """The guard fails closed on any verdict it does not know.
+
+    Only ``SANDBOX_AVAILABLE`` proceeds. A verdict added later, a typo, or a stubbed
+    probe returning something else entirely all land on the refusal, so extending the
+    probe cannot accidentally open the gate -- the direction a security guard must
+    fail in when someone adds a case and forgets this call site.
+    """
+    for bogus in ("AVAILABLE", "yes", "", None, True):
+        with pytest.raises(ConfigError):
+            entry.verify_sandbox(make_settings(tmp_path), probe=lambda value=bogus: value)
+
+
+def test_the_real_probe_returns_a_verdict_this_guard_understands() -> None:
+    """The shipped probe and the guard must not drift apart.
+
+    Both halves are in this module, and the guard now treats an unknown verdict as a
+    refusal -- which means a probe that started returning something else would make
+    the container refuse to boot everywhere rather than fail a test. Pin the contract
+    here: whatever this host is, the real probe's answer is one the guard recognises.
+    """
+    verdict = entry._user_namespaces_available()
+    assert verdict in (entry.SANDBOX_AVAILABLE, entry.SANDBOX_DENIED) or verdict.startswith(
+        entry.SANDBOX_UNDETERMINED_PREFIX
+    )
 
 
 @pytest.mark.parametrize(

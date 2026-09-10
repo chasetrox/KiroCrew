@@ -285,17 +285,39 @@ def verify_layout(settings: Settings) -> None:
         )
 
 
-def _user_namespaces_available() -> bool | None:
+#: The three things the sandbox probe can conclude. A verdict is a string rather
+#: than a tri-state boolean because the interesting case carries information: an
+#: undetermined verdict names WHY it could not be settled, and an operator needs
+#: that to act. ``SANDBOX_UNDETERMINED_PREFIX`` is the prefix every such verdict
+#: carries.
+SANDBOX_AVAILABLE = "available"
+SANDBOX_DENIED = "denied"
+SANDBOX_UNDETERMINED_PREFIX = "undetermined: "
+
+
+def _user_namespaces_available() -> str:
     """Probe whether this host permits an unprivileged user namespace.
 
-    Returns True/False on Linux, or None where the probe cannot run (no
-    ``os.unshare`` -- non-Linux), in which case the caller treats availability
-    as unknown and does not block. The probe runs in a forked child because
+    Returns one of :data:`SANDBOX_AVAILABLE`, :data:`SANDBOX_DENIED`, or an
+    ``undetermined: <why>`` verdict. The probe runs in a forked child because
     ``unshare`` mutates the caller's namespaces.
+
+    Undetermined is a real outcome and is reported as one, not folded into either
+    answer. It happens when the platform has no ``os.unshare``, when the fork
+    itself fails, or when the child neither succeeds nor reports a clean denial --
+    and the caller refuses on it, so the honest thing is to say which of those it
+    was rather than to pick a side on the host's behalf.
     """
     if not (hasattr(os, "unshare") and hasattr(os, "CLONE_NEWUSER")):
-        return None
-    pid = os.fork()
+        return (
+            f"{SANDBOX_UNDETERMINED_PREFIX}this platform has no os.unshare/os.CLONE_NEWUSER "
+            f"(sys.platform is {sys.platform!r}), so whether a user namespace could be "
+            "created cannot be tested here"
+        )
+    try:
+        pid = os.fork()
+    except OSError as exc:  # pragma: no cover - fork refused by the host
+        return f"{SANDBOX_UNDETERMINED_PREFIX}the probe could not fork a child ({exc})"
     if pid == 0:
         try:
             os.unshare(os.CLONE_NEWUSER)  # type: ignore[attr-defined]
@@ -305,7 +327,25 @@ def _user_namespaces_available() -> bool | None:
         except Exception:
             os._exit(2)
     _, status = os.waitpid(pid, 0)
-    return os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0
+    if os.WIFEXITED(status):
+        code = os.WEXITSTATUS(status)
+        if code == 0:
+            return SANDBOX_AVAILABLE
+        if code == 1:
+            return SANDBOX_DENIED
+        return (
+            f"{SANDBOX_UNDETERMINED_PREFIX}the probe child failed for a reason that is "
+            f"neither success nor a kernel refusal (exit code {code})"
+        )
+    if os.WIFSIGNALED(status):  # pragma: no cover - requires killing the probe child
+        return (
+            f"{SANDBOX_UNDETERMINED_PREFIX}the probe child was killed by signal "
+            f"{os.WTERMSIG(status)} before it could answer"
+        )
+    return (  # pragma: no cover - waitpid reporting neither exit nor signal
+        f"{SANDBOX_UNDETERMINED_PREFIX}the probe child reported neither an exit code nor "
+        f"a signal (raw wait status {status})"
+    )
 
 
 def verify_sandbox(settings: Settings, *, probe=_user_namespaces_available) -> None:
@@ -329,17 +369,36 @@ def verify_sandbox(settings: Settings, *, probe=_user_namespaces_available) -> N
     is not part of this change; until then the only posture this container
     accepts is sandboxed. On a host without user namespaces (Fargate today) it
     refuses to start, loudly, rather than boot into the exposed posture.
+
+    **Only ``SANDBOX_AVAILABLE`` proceeds.** Undetermined refuses, and so does any
+    verdict this function does not recognise. A probe that cannot reach an answer
+    used to be read as permission to continue, which is the same defect as reading
+    the environment through a denylist: it holds for the hosts someone already
+    thought of and fails open on the next one, and here failing open means an
+    auto-approving worker holding the model credential with no sandbox. The
+    refusal repeats the verdict verbatim so an operator learns what could not be
+    determined rather than only that something could not be.
     """
-    available = probe()
-    if available is None or available is True:
+    verdict = probe()
+    if verdict == SANDBOX_AVAILABLE:
         return
+    if verdict == SANDBOX_DENIED:
+        raise common.ConfigError(
+            "No user-namespace sandbox is available on this host, so kiro-cli cannot "
+            "spawn the model subprocess sandboxed. This container runs sandboxed-only "
+            "and does not offer an unsandboxed posture, so it refuses to start rather "
+            "than run the model subprocess -- which auto-approves every tool and holds "
+            "the model credential in its environment -- without a sandbox. Run where "
+            "unprivileged user namespaces are permitted."
+        )
     raise common.ConfigError(
-        "No user-namespace sandbox is available on this host, so kiro-cli cannot "
-        "spawn the model subprocess sandboxed. This container runs sandboxed-only "
-        "and does not offer an unsandboxed posture, so it refuses to start rather "
-        "than run the model subprocess -- which auto-approves every tool and holds "
-        "the model credential in its environment -- without a sandbox. Run where "
-        "unprivileged user namespaces are permitted."
+        f"Whether this host permits an unprivileged user-namespace sandbox could not be "
+        f"determined: {verdict}. This container runs sandboxed-only, so an undetermined "
+        "answer refuses exactly as a denial does: continuing would run the model "
+        "subprocess -- which auto-approves every tool and holds the model credential in "
+        "its environment -- with no evidence that a sandbox is in place. Run this image "
+        "on Linux where unprivileged user namespaces are permitted, and fix what "
+        "stopped the probe rather than reading its silence as consent."
     )
 
 
