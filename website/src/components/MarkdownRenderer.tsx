@@ -864,9 +864,22 @@ function MdAnchor({ node, href, children }: React.AnchorHTMLAttributes<HTMLAncho
       sessionCandidate = decodeURIComponent(href)
     } catch { /* keep it a normal link */ }
   }
+  // Whether this href NAMES a same-origin chat session at all, independent of
+  // whether that session is currently reachable (open). A closed/unknown key is
+  // still a chat-session href — it just does not resolve in the open-tabs roster.
+  const sessionHrefKey = sessionCandidate ? sessionKeyFromChatHref(sessionCandidate) : null
+  // Whether this renderer is wired to route sessions at all — the SAME predicate
+  // `resolveSessionChip` guards on (`onSessionOpen` AND `sessions`), so the link
+  // affordance and the click handler can never disagree. Both must be present:
+  // `ChatPage` keeps `onSessionOpen` wired but WITHHOLDS `sessions` while offline
+  // (`sessions={connected ? sessionTitles : undefined}`), and a no-controller
+  // render (e.g. an SDK `user` message row) has neither. In either case there is
+  // nothing that could switch sessions, so a `?sid=` link must stay an ordinary
+  // navigating link rather than be swallowed.
+  const sessionRouting = !!(sessionActions.onSessionOpen && sessionActions.sessions)
   // Same gate as the inline chip, so a link and a bare key naming one session
   // cannot disagree about whether it is reachable.
-  const sessionLink = sessionCandidate ? resolveSessionChip(sessionKeyFromChatHref(sessionCandidate) ?? '', sessionActions) : null
+  const sessionLink = sessionHrefKey ? resolveSessionChip(sessionHrefKey, sessionActions) : null
   // The attribute carries the canonical key: a modified click goes to the browser,
   // and an authored `dashboard_…` sid would open a session `?sid=` cannot resolve.
   const sessionHref = sessionLink && sessionCandidate ? canonicalChatHref(sessionCandidate, sessionLink.key) : null
@@ -874,9 +887,28 @@ function MdAnchor({ node, href, children }: React.AnchorHTMLAttributes<HTMLAncho
     // Only the PLAIN click is reinterpreted; the href stays real so Cmd+click
     // still opens the session in its own tab.
     const plainPrimaryClick = e.button === 0 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey
-    if (!sessionLink || !plainPrimaryClick) return
-    e.preventDefault()
-    sessionActions.onSessionOpen!(sessionLink.key)
+    if (!plainPrimaryClick) return
+    // A resolvable session opens in place. A chat-session href that does NOT
+    // resolve is swallowed rather than left to the browser. `resolveSessionChip`
+    // returns null in two cases, both correctly declined here:
+    //   - a closed / unknown key — its raw `?sid=` would navigate to a session
+    //     the controller cannot load, landing on a dead/blank view (#9914);
+    //   - the ACTIVE session's own key (`resolveSessionChip` rejects
+    //     `key === activeSession`) — a plain click is a no-op on the session you
+    //     are already in, matching the backtick chip, which renders the active
+    //     key as inert. Cmd/Ctrl/middle-click still opens the real href for
+    //     anyone who actually wants a duplicate tab.
+    //
+    // Both branches require `sessionRouting` — the renderer must actually be
+    // able to route sessions. When it cannot (offline: `sessions` withheld; or a
+    // no-controller render: neither wired), a `?sid=` link is an ordinary
+    // external link and keeps navigating as before, never a dead no-op.
+    if (sessionLink) {
+      e.preventDefault()
+      sessionActions.onSessionOpen!(sessionLink.key)
+    } else if (sessionHrefKey && sessionRouting) {
+      e.preventDefault()
+    }
   }
   const pathResolution = usePathResolution(
     localHref ?? '',
@@ -972,7 +1004,11 @@ function MdAnchor({ node, href, children }: React.AnchorHTMLAttributes<HTMLAncho
       {...sp(node)}
       href={sessionHref ?? href}
       // A `/chat?sid=` href is never a path, so the session branch wins outright.
-      onClick={sessionLink ? onSessionClick : (pathResolution.candidate ? onPathClick : undefined)}
+      // `sessionHrefKey` (not `sessionLink`) gates the handler so a session link
+      // that does not resolve — a closed/unknown key, or the active session's own
+      // key — is still intercepted and declined rather than left to navigate the
+      // browser to a dead `?sid=` view (#9914) or a duplicate tab.
+      onClick={sessionHrefKey ? onSessionClick : (pathResolution.candidate ? onPathClick : undefined)}
       title={sessionLink
         ? `${sessionLink.title}\n${i18nT('components.markdownRenderer.click_to_switch_to_this_session')}`
         : undefined}
