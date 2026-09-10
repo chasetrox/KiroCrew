@@ -69,3 +69,18 @@ The pre-retention directory preserves the exact historical source blob
 the feature branch. It is a different measurement from the current CI reports.
 Every older original remains byte-identical. These artifacts precede subsequent
 repairs and must not be described as validation of a later source head.
+
+
+## Final reports for source f3f901e1
+
+The [final report set](reports/f3f/README.md) includes the V1/V2 comparison,
+executive vision and technical design in PDF and editable Word form, with
+2, 2 and 6 pages respectively. The six original files are unchanged from their
+final authoring outputs. Their portable source companion retains T1-T8 claim
+mappings and canonical source hashes while omitting private authoring paths.
+
+These reports explain source f3f901e143490e07acad12fec9fd391d08711a01.
+They preserve separately identified historical measurements and UI evidence;
+they are not a claim of current CI success or release approval. All prior
+archived originals remain unchanged. The report folder has its own file manifest
+and does not redefine the scope of the historical root inventory.

@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "source": {
+    "commit": "f3f901e143490e07acad12fec9fd391d08711a01",
+    "parents": [
+      "256af4a69e4e298d9e918926f4a405137d5f438a"
+    ],
+    "tree": "4e80b185f21f426bfc5d4a1d90fae00127c2d979"
+  },
+  "reports": [
+    {
+      "name": "memory-v1-v2-comparison-final-f3f.docx",
+      "format": "docx",
+      "bytes": 135294,
+      "sha256": "1cfd9b4b20b45b7a98f047be36b794fe98d00174081463c54b7b7ca72bceab91",
+      "rendered_pages": 2,
+      "pagination_basis": "Paired retained PDF and rendered-page manifest; DOCX pagination depends on renderer."
+    },
+    {
+      "name": "memory-v1-v2-comparison-final-f3f.pdf",
+      "format": "pdf",
+      "bytes": 99398,
+      "sha256": "d940a191bcd563913a8780b955c17e75df8e3e8b0c5904e96c5e99044f099849",
+      "pages": 2
+    },
+    {
+      "name": "memory-v2-executive-vision-final-f3f.docx",
+      "format": "docx",
+      "bytes": 173337,
+      "sha256": "21f785113e3fd644698667458af91f0c8348a3a089d94d3c6d14034609335c43",
+      "rendered_pages": 2,
+      "pagination_basis": "Paired retained PDF and rendered-page manifest; DOCX pagination depends on renderer."
+    },
+    {
+      "name": "memory-v2-executive-vision-final-f3f.pdf",
+      "format": "pdf",
+      "bytes": 208290,
+      "sha256": "1c9756fb51bdb48d8f513b7e2019a94202e5cb0038539ef25d7b6d0a75b205b8",
+      "pages": 2
+    },
+    {
+      "name": "memory-v2-technical-design-final-f3f.docx",
+      "format": "docx",
+      "bytes": 178794,
+      "sha256": "69668a003b106b4d1f276ad98a72c5edc5d55d1a8763c958ea8d83ce49178508",
+      "rendered_pages": 6,
+      "pagination_basis": "Paired retained PDF and rendered-page manifest; DOCX pagination depends on renderer."
+    },
+    {
+      "name": "memory-v2-technical-design-final-f3f.pdf",
+      "format": "pdf",
+      "bytes": 255898,
+      "sha256": "126b9623051ace29039a6f718d521b124092195954eea62e070fa8d8989c05b1",
+      "pages": 6
+    }
+  ],
+  "public_source_companion": {
+    "name": "source-evidence-manifest.json",
+    "bytes": 363213,
+    "sha256": "034e9520726bedb513b0b6016ff8286b20551f2356b6248dd39509cb1a34de54"
+  },
+  "original_private_manifest_sha256": {
+    "qa-manifest.json": "1d2609a9db8e1f5b56627edc34efdab6a0fcb39791f197395e82f41487d2815d",
+    "source-evidence-manifest.json": "68058242bd26ffd6312cd490661551bcd83acfb9a5d75c5a5abf34bf54034c71"
+  },
+  "independent_verification": {
+    "report_file_hashes": "All six match the original private QA manifest.",
+    "pdf_pages": [
+      2,
+      2,
+      6
+    ],
+    "report_text_and_xml": "No em dash, disallowed version token or private absolute path in extracted report text, DOCX XML/relationships or PDF metadata.",
+    "source_inventory": "All 34 file hashes and byte lengths match canonical source Git objects at the declared commit.",
+    "t1_t8": "Complete map unchanged; all 55 embedded claim pointers resolve to unchanged claim objects.",
+    "page_review": "An independent agent read all ten PDF pages and viewed all ten retained rendered PNGs at tool display resolution. Tables, text and footers were readable with no observed clipping or overlap. Root independently spot-checked comparison page 1, vision page 1, and technical pages 4 and 6. This is agent inspection, not human QA or a product execution.",
+    "rendered_page_hashes": [
+      {
+        "report": "memory-v1-v2-comparison",
+        "page": 1,
+        "sha256": "c684a54ccb2cc967d22726acb733d3f711addb116c65d3c45fa298044993cea5"
+      },
+      {
+        "report": "memory-v1-v2-comparison",
+        "page": 2,
+        "sha256": "1d1637fc48a80ee616ede48580453860e34aa172689c229ad3cd34f0703a89eb"
+      },
+      {
+        "report": "memory-v2-executive-vision",
+        "page": 1,
+        "sha256": "2fcfb8e43e5acac709ce213b909b9bd9c0e6031140a8b2d66630129d406276f2"
+      },
+      {
+        "report": "memory-v2-executive-vision",
+        "page": 2,
+        "sha256": "dca5693b499203041bae6ab9cd92c85af74005acff14596cd77a1d85d29e263a"
+      },
+      {
+        "report": "memory-v2-technical-design",
+        "page": 1,
+        "sha256": "7fb2121368913b4e58e10b0209eeec472ba2fbe6628e31c6b40ec18c7ee47c38"
+      },
+      {
+        "report": "memory-v2-technical-design",
+        "page": 2,
+        "sha256": "59c0aca15c8ae5f8e59592844cb067f7b0fcf2fd5029727fd689ab9c16c3be20"
+      },
+      {
+        "report": "memory-v2-technical-design",
+        "page": 3,
+        "sha256": "5c90c7b974d24ff32f5346c8cd98781f093add5f987deaaf327b6c72bc0134de"
+      },
+      {
+        "report": "memory-v2-technical-design",
+        "page": 4,
+        "sha256": "ff34ae1c1a03d6d539199caedbbdbfca0870edcbb053a1a76386d90f2ffd3eb9"
+      },
+      {
+        "report": "memory-v2-technical-design",
+        "page": 5,
+        "sha256": "8b85af7fb4b172bc8778795652c605dd37551d15cbf32b9f7bfa5c004bf18657"
+      },
+      {
+        "report": "memory-v2-technical-design",
+        "page": 6,
+        "sha256": "9f7d1df266b6d0421fbe2b68128bb6d7f4d8099ce813d31df6b4bd4d6b59957c"
+      }
+    ]
+  },
+  "evidence_limits": {
+    "historical_retrieval": "The 44546 corpus-informed retrieval numbers are historical, not an f3f model run, held-out benchmark, same-condition V1/V2 A/B or evidence of answer-quality or productivity improvement.",
+    "focused_ui": "b38 retained CI artifact 10143446991 supplies the three inspected original Cancel/V1-label PNGs. Its other 33 PNGs and ten videos were not re-reviewed in the report audit. The ten passed scenario receipts do not constitute an independent rerun.",
+    "candidate_status": "The report and source companion preserve their supplied status snapshot. Later or successor CI completion does not convert these reports into an all-green candidate claim.",
+    "scope": "No product tests, browser execution, model run, deployment, report rewrite or publication was performed during this independent verification."
+  }
+}
