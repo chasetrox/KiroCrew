@@ -1876,6 +1876,7 @@ class TestLocalStreamingSession:
             assert (await ws.receive_json())["type"] == "ready"
             await ws.send_str('{"type":"stop"}')
             await ws.close()
+
     @pytest.mark.asyncio
     async def test_a_preparing_status_frame_precedes_ready_when_the_model_must_load(
         self, monkeypatch
@@ -1913,7 +1914,6 @@ class TestLocalStreamingSession:
             assert (await ws.receive_json())["type"] == "ready"
             await ws.send_str('{"type":"stop"}')
             await ws.close()
-
 
     @pytest.mark.asyncio
     async def test_download_progress_is_republished_while_the_transfer_runs(self, monkeypatch):
