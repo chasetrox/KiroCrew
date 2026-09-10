@@ -314,6 +314,43 @@ _JOB_TIMEOUT_SECS = 1800  # 30 min per job
 _SUBPROC_CLEANUP_ALLOWANCE_SECS = 5
 _TIMER_POLL_SECS = 30  # check for due cron-expr jobs
 _AUTO_PAUSE_THRESHOLD = 5  # consecutive failures before a script/command cron auto-pauses
+
+# Sandbox profile a SCRIPT job's child runs under. Closed enum, validated the
+# way ``approval_mode`` is (a finite-set check at every write boundary), not by
+# the string-length table.
+#
+#   ""         -> the default, and the same runtime profile as "cc"
+#   "cc"       -> credential stores hidden (~/.aws except ~/.aws/config,
+#                 ~/.kube, ~/.gnupg, ~/.netrc, ~/.git-credentials, ~/.npmrc,
+#                 ~/.pypirc, the crew .env); ~/.aws/config stays readable so
+#                 credential_process auth still works
+#   "standard" -> the WIDE profile: those credential stores are readable
+#
+# Two spellings for one runtime meaning is deliberate. Absence of the key on
+# disk is the pre-upgrade signal the legacy rule in ``_load`` reads, so a
+# NEW job always serializes the field explicitly and "" can never be confused
+# with "this record predates the field". ``run_script_sandboxed`` is the single
+# reader that collapses ""/"cc".
+#
+# OPERATOR-ONLY: "standard" is reachable from the OWNER-GATED dashboard REST
+# PATCH handler and nowhere else -- not from the MCP ``cron_add`` /
+# ``cron_update`` tools, and not from the CLI. A prompt-injected agent under an
+# auto-approving session must not be able to widen the sandbox its own next
+# script runs in -- the same "agent proposes, operator disposes" rule the
+# vault-secret grant flow enforces.
+_CRON_SANDBOX_MODES: tuple[str, ...] = ("", "cc", "standard")
+
+
+def _validate_sandbox_mode(value: object) -> str:
+    """Finite-set gate for the ``sandbox`` field. Returns the accepted value."""
+    if not isinstance(value, str) or value not in _CRON_SANDBOX_MODES:
+        raise ValueError(
+            f"Invalid sandbox: {value!r} (expected one of "
+            f"{', '.join(repr(m) for m in _CRON_SANDBOX_MODES)})"
+        )
+    return value
+
+
 _REAPER_INTERVAL = 60  # seconds between reaper sweeps
 _REAPER_RESET_TIMEOUT = 30.0  # max seconds for session reset in reaper
 
@@ -688,6 +725,16 @@ class CronJob:
     timeout: int = (
         0  # script/command timeout in seconds (0 = use default: 30s script, 300s command)
     )
+    # Sandbox profile for SCRIPT jobs; see _CRON_SANDBOX_MODES. "" and "cc"
+    # both mean the cc profile (credential stores hidden). "standard" widens it
+    # and is settable ONLY from an operator surface -- the dashboard REST PATCH
+    # handler, which is owner-gated -- never from the MCP cron tools and never
+    # from the CLI, so an agent cannot widen the sandbox its own script runs in. A
+    # record loaded with NO "sandbox" key at all predates this field and is
+    # kept on "standard" by _load, so an upgrade changes no behaviour
+    # for a job that already existed. Ignored for command jobs (they already
+    # run cc) and agent jobs (no subprocess of their own).
+    sandbox: str = ""
     # Operator-approved vault secrets for SCRIPT jobs: env-var name ->
     # vault secret NAME (kiro_crew.secrets.SecretVault; plaintext never touches
     # this store). Minted ONLY by the owner approving an agent request on the
@@ -1469,6 +1516,35 @@ def _str_or_empty(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def _record_is_pre_sandbox_script(j: object) -> bool:
+    """True when *j* is a SCRIPT record written before the ``sandbox`` field.
+
+    The signal is the ABSENCE of the key, not a falsy value: every job written
+    since the field landed serializes it explicitly, so ``"sandbox" not in j``
+    means "this record predates the cc default" and nothing else. Only script
+    records are affected -- command jobs already ran cc and agent jobs spawn no
+    script child.
+    """
+    return isinstance(j, dict) and bool(j.get("script")) and "sandbox" not in j
+
+
+def _record_sandbox(j: dict[str, Any]) -> str:
+    """Resolve a record's sandbox profile, keeping pre-upgrade scripts on their old profile.
+
+    A script job written before the field existed ran under the WIDE
+    ``standard`` profile, so an upgrade must not silently narrow what it can
+    read: it loads as ``"standard"``, and the next :meth:`CronService._save`
+    writes that value out, because ``_save`` serializes every field from the
+    in-memory jobs. An unrecognised value on
+    disk resolves to the SAFE default (``""`` -> cc) rather than raising -- the
+    store is hand-editable and one bad value must not drop the whole record.
+    """
+    if _record_is_pre_sandbox_script(j):
+        return "standard"
+    raw = j.get("sandbox", "")
+    return raw if isinstance(raw, str) and raw in _CRON_SANDBOX_MODES else ""
+
+
 def _job_from_record(j: dict[str, Any]) -> CronJob:
     """Build one :class:`CronJob` from its serialized record.
 
@@ -1550,6 +1626,7 @@ def _job_from_record(j: dict[str, Any]) -> CronJob:
         script=j.get("script", ""),
         command=j.get("command", ""),
         timeout=j.get("timeout", 0),
+        sandbox=_record_sandbox(j),
         secret_env=j.get("secret_env", {}),
         secret_env_pin=j.get("secret_env_pin", ""),
         secret_env_pending=j.get("secret_env_pending", {}),
@@ -2576,6 +2653,51 @@ class CronService:
             self._arm_timer()
         return job
 
+    def set_sandbox(self, job_id: str, mode: str) -> CronJob | None:
+        """Write one job's sandbox profile. OWNER-ONLY.
+
+        Deliberately NOT a field of :meth:`update_job`, and that separation is
+        the control rather than a style choice. ``update_job`` takes ``**kwargs``
+        and the App SDK forwards an app's own kwargs into it verbatim, so every
+        field reachable there is reachable by agent-authored code; ``standard``
+        hands that code the host credential stores. This method has its own store
+        transaction, so no kwargs path reaches it, and its single caller is the
+        dashboard REST PATCH handler after ``require_owner_dashboard_request``.
+
+        Returns the updated job, or ``None`` when the id is absent. Raises
+        ``ValueError`` for a value outside the closed enum.
+        """
+        _validate_sandbox_mode(mode)
+        job = self._set_sandbox_locked(job_id, mode)
+        if job is not None:
+            self._arm_timer()
+        return job
+
+    async def set_sandbox_async(self, job_id: str, mode: str) -> CronJob | None:
+        """Event-loop-safe :meth:`set_sandbox`: the lock+save runs off the loop."""
+        _validate_sandbox_mode(mode)
+        job = await asyncio.to_thread(self._set_sandbox_locked, job_id, mode)
+        if job is not None:
+            self._arm_timer()
+        return job
+
+    def _set_sandbox_locked(self, job_id: str, mode: str) -> CronJob | None:
+        """Lock/reload/mutate/save core of :meth:`set_sandbox` (no timer work).
+
+        Same store discipline as the other locked writers -- take the file lock,
+        reload so the mutation lands on the current record, write one field, save
+        -- and no ``**kwargs`` surface, which is what keeps the App SDK out.
+        """
+        with self._file_lock():
+            self._sync_for_write()
+            for job in self._jobs:
+                if job.id != job_id:
+                    continue
+                job.sandbox = mode
+                self._save()
+                return job
+        return None
+
     async def update_job_async(self, job_id: str, **kwargs: Any) -> CronJob | None:
         """Event-loop-safe :meth:`update_job`: the lock+save runs off the loop.
 
@@ -2628,6 +2750,22 @@ class CronService:
                     valid_approval_modes = ("", "auto")
                     if kwargs["approval_mode"] not in valid_approval_modes:
                         raise ValueError(f"Invalid approval_mode: {kwargs['approval_mode']!r}")
+                # `sandbox` is REFUSED here, not validated, and the refusal
+                # IS the boundary. This is the GENERIC update path and not every
+                # caller is an operator: the App SDK's ``ctx.cron.update_job``
+                # forwards an app's own ``**kwargs`` verbatim (cron_sdk.py), so
+                # any field reachable here is reachable by agent-authored code,
+                # and widening a script job to ``standard`` hands that code the
+                # host credential stores. Validating the value would ACCEPT it.
+                # The one write path is :meth:`set_sandbox`, which has its own
+                # store transaction and is called only from the owner-gated
+                # dashboard REST handler.
+                if "sandbox" in kwargs:
+                    raise ValueError(
+                        "sandbox is not settable through update_job: it is an "
+                        "owner-only field, written via set_sandbox() from the "
+                        "owner-authenticated dashboard endpoint"
+                    )
                 # Validate before any mutations
                 # Table-driven type+length gate for every updatable string
                 # field. Falsy values are intentional no-ops (the assignment
@@ -4907,6 +5045,21 @@ class CronService:
                         entry_id,
                         entry_exc,
                     )
+            # Legacy: a script record with NO "sandbox" key predates the
+            # cc default and kept the wide ``standard`` profile it has always
+            # run under (_record_sandbox did that above). Mark the store as
+            # owing a write so the next _save spells the value out, and log the
+            # job IDS only -- a cron name or message is user text and belongs
+            # nowhere near a startup log line.
+            legacy_ids = [str(j.get("id", "")) for j in records if _record_is_pre_sandbox_script(j)]
+            if legacy_ids:
+                logger.info(
+                    "Cron script job(s) %s predate the sandbox field: kept on the "
+                    "'standard' sandbox. New script jobs default to 'cc' (credential "
+                    "stores hidden); switch one with "
+                    "PATCH /api/crons/<id>.",
+                    ", ".join(legacy_ids),
+                )
             self._jobs = jobs
             # Fingerprint from the stat taken BEFORE the read: if a writer
             # replaced the file between our stat and read we may have loaded the
@@ -5118,6 +5271,9 @@ class CronService:
                     "script": j.script,
                     "command": j.command,
                     "timeout": j.timeout,
+                    # Always written, even when "" -- absence of this key is
+                    # the pre-upgrade signal _record_sandbox reads.
+                    "sandbox": j.sandbox,
                     "secret_env": j.secret_env,
                     "secret_env_pin": j.secret_env_pin,
                     "secret_env_pending": j.secret_env_pending,

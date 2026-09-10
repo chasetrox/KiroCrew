@@ -2236,3 +2236,137 @@ class TestPostKillDrainTimeoutHardening:
         }
         mock_proc.stdout.close.assert_called_once()
         mock_proc.stderr.close.assert_called_once()
+
+
+class TestRunScriptSandboxMode:
+    """The sandbox profile an ungranted script cron's child runs under.
+
+    An ungranted script runs ``cc``, the same profile command jobs use:
+    ``~/.aws/credentials``, ``~/.kube/config`` and ``~/.netrc`` are hidden
+    from the child. The ``standard`` profile leaves all three readable, and
+    ``mcp_cron._vet_script_contents`` cannot fence them — it is a static text
+    scan its own docstring disclaims
+    (``open(os.path.expanduser("~/." + "aws" + "/credentials"))`` walks past
+    it). Only an OPERATOR surface widens one job to ``standard``.
+
+    Each test records the ``mode=`` kwarg ``wrap_argv`` receives. The recorder
+    returns a MODIFIED argv (a benign ``-X utf8`` after the interpreter, which
+    exists on every platform) so the granted path's no-backend refusal does not
+    fire before the assertion.
+    """
+
+    @staticmethod
+    def _script(tmp_path: Path, body: str = "def run(ctx): pass\n") -> Path:
+        crons_dir = tmp_path / ".kirocrew" / "crons"
+        crons_dir.mkdir(parents=True, exist_ok=True)
+        script = crons_dir / "job.py"
+        script.write_text(body)
+        return script
+
+    @staticmethod
+    def _record(monkeypatch) -> dict:
+        seen: dict = {}
+
+        def recording_wrap(argv, **kwargs):
+            seen.update(kwargs)
+            seen["argv"] = list(argv)
+            return ([argv[0], "-X", "utf8", *argv[1:]], None)
+
+        monkeypatch.setattr("kiro_crew.cron_script.wrap_argv", recording_wrap)
+        return seen
+
+    def test_cc_asks_for_the_aws_carve_out(self, tmp_path, monkeypatch):
+        """cc must hide ``~/.aws`` and expose ``~/.aws/config`` EXPLICITLY.
+
+        ``wrap_argv``'s contract for cc is "hide .aws but expose .aws/config",
+        and the Linux launcher delivers it from the tier list alone. The macOS
+        Seatbelt path does not -- it drops ``.aws`` from the deny list -- so a cc
+        child there could read ``~/.aws/credentials``, the one store this path
+        exists to keep from an agent-written body. Asking at the call site closes
+        that on every platform without touching the shared profile, so command
+        crons and agent shells keep today's behaviour.
+
+        This asserts the ARGUMENTS, which is the seam a Linux host can check; the
+        platform backends' own honouring of those two primitives is covered where
+        they live.
+        """
+        seen = self._record(monkeypatch)
+        script = self._script(tmp_path)
+        with patch("pathlib.Path.home", return_value=tmp_path):
+            run_script_sandboxed(str(script) + ":run", "job1", timeout=30)
+
+        assert seen["mode"] == "cc"
+        assert str(tmp_path / ".aws") in seen["extra_hidden_dirs"]
+        assert seen["extra_expose_files"] == (str(tmp_path / ".aws" / "config"),)
+
+    def test_standard_does_not_add_the_carve_out(self, tmp_path, monkeypatch):
+        """The operator asked for the WIDE profile, so nothing is carved out --
+        adding the hide here would silently defeat the opt-in they chose."""
+        seen = self._record(monkeypatch)
+        script = self._script(tmp_path)
+        with patch("pathlib.Path.home", return_value=tmp_path):
+            run_script_sandboxed(str(script) + ":run", "job1", timeout=30, sandbox="standard")
+
+        assert seen["mode"] == "standard"
+        assert str(tmp_path / ".aws") not in seen["extra_hidden_dirs"]
+        assert seen["extra_expose_files"] == ()
+
+    def test_ungranted_script_defaults_to_cc(self, tmp_path, monkeypatch):
+        """No grant and no operator opt-in -> cc, credential stores hidden."""
+        seen = self._record(monkeypatch)
+        script = self._script(tmp_path)
+        with patch("pathlib.Path.home", return_value=tmp_path):
+            run_script_sandboxed(str(script) + ":run", "job1", timeout=30)
+        assert seen.get("mode") == "cc"
+
+    def test_explicit_cc_is_the_same_as_the_default(self, tmp_path, monkeypatch):
+        """ "" and "cc" are one runtime profile; the two spellings exist so an
+        ABSENT key on disk can mean "pre-upgrade record" and nothing else."""
+        seen = self._record(monkeypatch)
+        script = self._script(tmp_path)
+        with patch("pathlib.Path.home", return_value=tmp_path):
+            run_script_sandboxed(str(script) + ":run", "job1", timeout=30, sandbox="cc")
+        assert seen.get("mode") == "cc"
+
+    def test_operator_opt_in_selects_standard(self, tmp_path, monkeypatch):
+        """A job an operator widened runs the wide profile — the escape hatch
+        for a script that genuinely needs host credentials."""
+        seen = self._record(monkeypatch)
+        script = self._script(tmp_path)
+        with patch("pathlib.Path.home", return_value=tmp_path):
+            run_script_sandboxed(str(script) + ":run", "job1", timeout=30, sandbox="standard")
+        assert seen.get("mode") == "standard"
+
+    def test_unrecognised_value_falls_back_to_cc(self, tmp_path, monkeypatch):
+        """Only the exact string "standard" widens. Anything the write-boundary
+        validators would have refused — a value smuggled into the store by a
+        hand edit — must land on the SAFE profile, not an open one."""
+        seen = self._record(monkeypatch)
+        script = self._script(tmp_path)
+        with patch("pathlib.Path.home", return_value=tmp_path):
+            run_script_sandboxed(str(script) + ":run", "job1", timeout=30, sandbox="off")
+        assert seen.get("mode") == "cc"
+
+    def test_granted_run_stays_strict_even_when_widened(self, tmp_path, monkeypatch):
+        """A secret grant overrides the job field: the operator approved
+        secrets for one body, so the child gets the smallest reachable surface
+        the sandbox can give it — ``sandbox="standard"`` does not loosen it."""
+        from kiro_crew.cron_script import compute_secret_env_pin
+        from kiro_crew.secrets import SecretVault
+
+        seen = self._record(monkeypatch)
+        SecretVault(tmp_path / ".kirocrew").set_sync("slack-sandbox", "xoxb-script")
+        script = self._script(tmp_path)
+        spec = str(script) + ":run"
+        grant = {"MY_SANDBOX_TOKEN": "slack-sandbox"}
+        with patch("pathlib.Path.home", return_value=tmp_path):
+            pin = compute_secret_env_pin(spec, "", job_id="job1", grant=grant)
+            run_script_sandboxed(
+                spec,
+                "job1",
+                timeout=120,
+                secret_env=grant,
+                secret_env_pin=pin,
+                sandbox="standard",
+            )
+        assert seen.get("mode") == "strict"

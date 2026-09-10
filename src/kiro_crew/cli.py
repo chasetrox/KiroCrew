@@ -1504,6 +1504,12 @@ Examples:
         default=None,
         help='Tool approval mode ("auto" to auto-approve, "default" to reset)',
     )
+    # No `--sandbox` flag here, deliberately. Widening a script job's sandbox
+    # hands agent-authored code the host credential stores, so it is owner-only,
+    # and this CLI cannot tell an operator's shell from an agent's: the agent
+    # holds the same shell, and any session signal it read would come from the
+    # process it is guarding against. `PATCH /api/crons/{id}` is the write path,
+    # because an owner dashboard credential is a thing an agent does not have.
     cron_rm = cron_sub.add_parser("remove", help="Remove a cron job")
     cron_rm.add_argument("job_id", help="Job ID to remove")
     cron_pause = cron_sub.add_parser("pause", help="Pause a cron job")

@@ -798,12 +798,17 @@ def _vet_script_contents(text: str) -> str | None:
     A ``cron_add`` ``script`` job points at a file under ``~/.kiro/crew/crons/``
     that the agent itself can write (via its file-write tool) and then register.
     ``resolve_script_path`` validates only the *path*, so without this the body
-    is never inspected. The script runs under ``mode="standard"`` (user scripts
-    may legitimately use creds), which does NOT hide ``~/.aws`` -- so a body that
-    reads ``~/.aws/credentials`` or ``os.environ["AWS_SECRET_ACCESS_KEY"]`` and
-    POSTs it out would succeed. Credential exfiltration -- which a human
-    rubber-stamping the ``cron_add`` approval prompt would not catch -- is the
-    threat this gate closes.
+    is never inspected. This gate is a FIRST-LINE filter on the obvious case
+    (a body that names ``~/.aws/credentials`` or ``AWS_SECRET_ACCESS_KEY`` in
+    plain text and POSTs it out) which a human rubber-stamping the ``cron_add``
+    approval prompt would not catch. It is not the fence: the runtime control is
+    the sandbox, and an ungranted script now runs ``mode="cc"``, where those
+    credential stores are hidden from the child (``~/.aws/config`` stays
+    readable so ``credential_process`` auth still works). The wide
+    ``mode="standard"`` profile is reachable only when an OPERATOR sets
+    ``CronJob.sandbox = "standard"`` on one job from the REST
+    PATCH handler, which is owner-gated; the MCP cron tools do
+    not accept the field, so the agent cannot widen its own script's view.
 
     The body is PYTHON SOURCE, not a shell command line, so it is scanned only with
     the detectors that are meaningful on source text and are all linear, whole-body
@@ -822,11 +827,13 @@ def _vet_script_contents(text: str) -> str | None:
     ``security.py``, and the ~1500 lines that resulted still could not stop
     ``open(os.environ["LOCALAPPDATA"] + r"\\kiro-cli\\config.json")``: static text
     analysis of a Turing-complete body cannot be the fence. The runtime control for
-    what a script may OPEN is the sandbox ``run_script`` spawns it in (``wrap_argv``
-    bind-masks the crew home's credential leaves, the vault and the keystone in
-    ``standard`` mode); this gate stops the obvious register-a-malicious-script case
-    and nothing more. Destructive-op risk is covered by the required ``cron_add``
-    approval prompt.
+    what a script may OPEN is the sandbox ``run_script`` spawns it in: ``cc`` for an
+    ungranted script (the credential stores hidden on top of the crew home's own
+    leaves, the vault and the keystone, which every mode bind-masks), ``strict`` for
+    a secret-granted run, and ``standard`` only on a job an operator widened by
+    hand. This gate stops the obvious register-a-malicious-script case and nothing
+    more. Destructive-op risk is covered by the required ``cron_add`` approval
+    prompt.
 
     ``_vet_script_file`` keeps its own ``is_sensitive_path`` on the resolved path.
     """
@@ -1211,7 +1218,13 @@ def _list_tools() -> list[dict[str, Any]]:
                         "ScriptContext and can raise Skip() to retry or Done() to "
                         "remove the job. Use ctx.notify() to deliver messages. "
                         "When set, 'message' is passed to the script as ctx.message "
-                        "(used for arguments) rather than being sent to an LLM.",
+                        "(used for arguments) rather than being sent to an LLM. "
+                        "A script cron runs in the cc sandbox: credential stores "
+                        "(~/.aws/credentials, ~/.kube, ~/.netrc, ~/.git-credentials) "
+                        "are hidden from it, while ~/.aws/config and credential_process "
+                        "auth still work. An operator can move one job to the wider "
+                        "'standard' sandbox from the owner-only REST endpoint; "
+                        "you cannot.",
                     },
                     "command": {
                         "type": "string",
@@ -2485,10 +2498,25 @@ def _call_tool_inner(name: str, args: dict[str, Any]) -> str:
             not (command or script),
             len(args.get("agent_sequence") or []),
         )
+        # Script jobs get the sandbox note appended: the caller decides what the
+        # script tries to open, so it has to know what the child can actually
+        # reach -- and that the one way to widen it is a human, not a retry with
+        # a different argument. Read from ``args``, like every other input here.
+        sandbox_note = ""
+        if script:
+            sandbox_note = (
+                " This script runs in the cc sandbox: credential stores "
+                "(~/.aws/credentials, ~/.kube, ~/.netrc) are hidden from it, while "
+                "~/.aws/config and credential_process auth still work. If it needs "
+                "host credentials, ask the user to switch the job to the 'standard' "
+                "sandbox from the owner-only REST endpoint -- you cannot "
+                "set that yourself."
+            )
         return (
             f"Added job: {job.id} ({job.name}) [{sched_str}]. "
             f"Tell the user: scheduled for {sched_str}.{caveats}"
             + _sub_floor_timeout_note(timeout_secs_val)
+            + sandbox_note
         )
 
     if name == "cron_update":

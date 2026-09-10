@@ -4327,6 +4327,11 @@ class GatewayOrchestrator:
                             job.channel or "",
                             job.thread_ts or "",
                         ),
+                        # Operator-set sandbox profile for this job: "" (the
+                        # default) and "cc" both hide the credential stores;
+                        # only an operator surface can widen it to "standard".
+                        # A granted run overrides it with strict.
+                        job.sandbox,
                         timeout=_claim_backstop(job, script_timeout),
                     )
                     status = result.get("status", "error")

@@ -665,6 +665,22 @@ def _sanitize_imported_crons(crons_path: Path) -> tuple[list[str], list[str]]:
                 "Error: an imported job that runs a command or script is "
                 "restored paused until it is enabled by hand",
             )
+
+        # Rule 4: an import is neither an upgrade nor an operator, so the
+        # field is REPLACED rather than defaulted. A script record can arrive on
+        # the wide `standard` profile two ways and only overwriting closes both.
+        # A MISSING key is what the loader reads as "written before the cc
+        # default", so a foreign record would inherit a legacy profile it never
+        # had. An EXPLICIT "standard" is the plainer one: the file just says so,
+        # and nobody holding owner authority ever asked -- `sandbox` is writable
+        # only through the owner-gated REST handler, and an import carries no
+        # such authorization. Rule 3 leaves the job paused, but a human enabling
+        # it is the intended workflow and tells them nothing about what the child
+        # can read. ``job.get("sandbox")`` is None for an absent key and never
+        # equals "", so one comparison covers both shapes.
+        if script and job.get("sandbox") != "":
+            job["sandbox"] = ""
+            changed = True
         kept.append(job)
 
     if changed:

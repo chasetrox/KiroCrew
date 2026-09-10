@@ -20,6 +20,7 @@ from aiohttp import web
 from kiro_crew import model_registry
 from kiro_crew.config.loader import config_dir
 from kiro_crew.cron import (
+    _CRON_SANDBOX_MODES,
     CronPendingMismatch,
     CronStoreBusy,
     CronStoreUnreadable,
@@ -719,6 +720,19 @@ async def api_cron_update(request: web.Request) -> web.Response:
     if body_err is not None:
         return body_err
     assert body is not None  # read_bounded_json returns (dict, None) on success
+    # `sandbox` is OWNER-only, and the rest of this handler is not. A dashboard
+    # token is minted for every allowed Slack user (!dashboard), who is not the
+    # owner -- so "authenticated dashboard caller" is a weaker boundary than this
+    # field needs. Widening a script job to `standard` hands agent-authored code
+    # the host credential stores, the same grant the vault flow gates on
+    # ownership. Gated on the KEY, not the value: `cc` is the safe direction, but
+    # the field's contract is operator-only in both, and one rule is what keeps
+    # the two directions from drifting. Every other field stays reachable by any
+    # dashboard caller, so this costs a non-owner nothing unless they name it.
+    if "sandbox" in body:
+        denied = await require_owner_dashboard_request(request, "cron.sandbox")
+        if denied is not None:
+            return denied
     kwargs: dict[str, Any] = {}
     for key in (
         "name",
@@ -730,6 +744,14 @@ async def api_cron_update(request: web.Request) -> web.Response:
         "hide_in_chat",
         "minimal_context",
         "folder_id",
+        # OPERATOR-ONLY, and this handler is the ONLY write path. The MCP
+        # cron_add / cron_update tools deliberately do not carry `sandbox` (their
+        # schema rejects any unknown key), because a prompt-injected agent under
+        # an auto-approving session must not be able to widen the sandbox its own
+        # next script runs in -- the same "agent proposes, operator disposes"
+        # rule the vault-secret grant flow enforces. The owner gate above is what
+        # makes that true: an agent holds no owner credential.
+        "sandbox",
     ):
         if key in body:
             kwargs[key] = body[key]
@@ -760,6 +782,22 @@ async def api_cron_update(request: web.Request) -> web.Response:
         elif not isinstance(fid, str) or len(fid) > MAX_SHORT_STRING:
             return web.json_response(
                 {"error": "invalid folder_id format", "code": "invalid_folder_id"},
+                status=400,
+            )
+    # sandbox is a closed enum: "" / "cc" (credential stores hidden from a script
+    # child) or "standard" (the wide profile). Checked here as a structured 400 so
+    # the surface answers like its folder_id/model siblings rather than surfacing
+    # the store's bare ValueError; _update_job_locked re-validates regardless.
+    if "sandbox" in kwargs:
+        sb = kwargs["sandbox"]
+        if sb is None:
+            kwargs["sandbox"] = ""
+        elif not isinstance(sb, str) or sb not in _CRON_SANDBOX_MODES:
+            return web.json_response(
+                {
+                    "error": "invalid sandbox (expected 'cc' or 'standard')",
+                    "code": "invalid_sandbox",
+                },
                 status=400,
             )
     # UI sends "agent"; internal kwarg is "agent_id". Accept "agent_id" for scripted callers.
@@ -804,10 +842,54 @@ async def api_cron_update(request: web.Request) -> web.Response:
             safe_tz, _ = redact_credentials(redact_exfiltration_urls(tz_val)[0])
             return web.json_response({"error": f"invalid timezone: {safe_tz!r}"}, status=400)
         kwargs["timezone"] = tz_val
-    if not kwargs:
+    # `sandbox` leaves the kwargs dict here: ``update_job`` REFUSES the key, so
+    # that an App SDK caller forwarding its own kwargs cannot reach it. Its
+    # writer is ``set_sandbox_async``, and the owner gate at the top of this
+    # handler is what earns the right to call it.
+    sandbox_mode = kwargs.pop("sandbox", None)
+    if not kwargs and sandbox_mode is None:
         return web.json_response({"error": "no fields to update"}, status=400)
+    # A sandbox change is its OWN request. Carrying it alongside other fields
+    # would take two store transactions -- `update_job_async` then
+    # `set_sandbox_async` -- and a failure in the second leaves the first
+    # applied. On this field a half-applied update is a privilege state nobody
+    # chose, and it is the state the audit line below would then misdescribe.
+    # Refused rather than sequenced: one request, one transaction, one audit
+    # record. No current caller mixes them (the Schedule page has no control,
+    # and every PATCH caller sends only what it changed).
+    if sandbox_mode is not None and kwargs:
+        return web.json_response(
+            {
+                "error": "sandbox must be updated on its own, not with other fields",
+                "code": "sandbox_not_mixable",
+            },
+            status=400,
+        )
+    if sandbox_mode is not None:
+        # AUDIT-OR-DENY, before the write -- the same order and the same refusal
+        # the vault grant uses. Widening a script job to `standard` is a
+        # privilege grant: it hands agent-authored code the host credential
+        # stores, so it must not be possible to perform one that leaves no
+        # record. If SEL cannot take the entry, the grant does not happen.
+        try:
+            await asyncio.to_thread(
+                lambda: _sel().log_api_access(
+                    caller="dashboard",
+                    operation="cron.sandbox_set",
+                    outcome="invoked",
+                    source="dashboard",
+                    resources=f"{job_id}:{sandbox_mode or 'cc'}",
+                    critical=True,
+                )
+            )
+        except Exception:
+            logger.warning("SEL unavailable; refusing sandbox change for %s", job_id, exc_info=True)
+            return _audit_unavailable_response("sandbox change")
     try:
-        job = await state.crons.update_job_async(job_id, **kwargs)
+        if sandbox_mode is not None:
+            job = await state.crons.set_sandbox_async(job_id, sandbox_mode)
+        else:
+            job = await state.crons.update_job_async(job_id, **kwargs)
     except CronStoreBusy:
         return web.json_response(_CRON_BUSY_BODY, status=_CRON_BUSY_STATUS)
     except CronStoreUnreadable as exc:
@@ -2432,6 +2514,10 @@ async def api_crons(request: web.Request) -> web.Response:
             # of defaulting the control to off and silently clearing the flag on
             # the next save.
             "minimal_context": j.minimal_context,
+            # Sandbox profile of a script job's child. "" and "cc" are the same
+            # runtime profile; the edit form needs the real stored value or a
+            # save would silently move a job an operator widened back to cc.
+            "sandbox": j.sandbox,
             "folder_id": j.folder_id,
             # The Schedule-page template this job was seeded from, or None. A
             # stable catalog id (e.g. "error-digest"), not user free-text, so
