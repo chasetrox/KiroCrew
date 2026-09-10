@@ -57,7 +57,13 @@ export const CHUNK_BUDGETS = {
   // takeover, 13 catalogs x 52 lines, ~55 KB). Same recurrence as the `t` and
   // `App` entries below: a ceiling that drifted to <1% headroom fails on
   // routine string growth rather than on the new library it exists to catch.
-  all: 10975 * KB, // measured 10450 KB on main 2026-09-06 (~5% headroom)
+  // Re-measured 2026-09-10 with Memory V2: the private-memory panels (member
+  // memory, records editor, store picker/card, carve, backups, retired) add
+  // their strings across all 13 catalogs and build the chunk at 11,332,186 B
+  // (11067 KB), 92 KB over the 10975 KB ceiling. Same recurrence as above --
+  // routine string growth, no new library -- so the ceiling moves to 5%
+  // headroom over that measurement rather than compacting unrelated copy to fit.
+  all: 11620 * KB, // measured 11067 KB on feat/memory-v2-ui 2026-09-10 (~5% headroom)
 
   // The i18n RUNTIME — the i18next singleton, `initI18n`, the English catalog —
   // named after `src/i18n/t.ts`. Held separately from `all` above because
